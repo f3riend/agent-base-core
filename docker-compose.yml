@@ -1,0 +1,91 @@
+# VITE_BASE_PATH / APP_BASE_PATH: kok .env ile; alt dizin ornegi /posting/agent-base/ + imaj yeniden build.
+# Arayüz Docker icinde PHP (php-ui); API degismedi.
+# Yerel tam stack: Redis + MySQL + all-in-one. API veritabani icin varsayilan:
+#   DOCKER_DATABASE_URL (bos ise) -> mysql servisindeki agentbase kullanicisi.
+# Harici MySQL kullanacaksan proje kokundeki .env veya ortamda DOCKER_DATABASE_URL ayarla.
+services:
+  agent-base-allinone:
+    container_name: agent-base-allinone
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api}
+        VITE_HOLIDAY_COUNTRY: ${VITE_HOLIDAY_COUNTRY:-TR}
+        VITE_STORAGE_PUBLIC_URL: ${VITE_STORAGE_PUBLIC_URL:-}
+        VITE_BASE_PATH: ${VITE_BASE_PATH:-/}
+        APP_BASE_PATH: ${VITE_BASE_PATH:-/}
+        UV_HTTP_TIMEOUT: ${UV_HTTP_TIMEOUT:-300}
+        UV_HTTP_RETRIES: ${UV_HTTP_RETRIES:-5}
+    env_file:
+      - ./agent-base-api/.env
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-/api}
+      APP_CANONICAL_URL: ${APP_CANONICAL_URL:-}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      USE_CELERY: ${USE_CELERY:-true}
+      CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-4}
+      # Medya yolu + tarayicida gorunen kok (nginx :8080). R2/MEDIA_STORAGE sadece env_file'dan —
+      # asla ${R2_...:-} ile burada verme: kok .env'de yoksa bos string env_file'i ezer.
+      MEDIA_ROOT: /data/media
+      MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost:8080}
+      # agent-base-api/.env icindeki 127.0.0.1 MySQL konteynerde calismaz; compose varsayilanini kullan.
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-mysql+pymysql://agentbase:agentbase_pass@mysql:3306/agentbase}
+      # Tur 4 — LangGraph + structured rule engine
+      # listener / workflow_worker / task_executor supervisord altında
+      # uvicorn ile aynı container'da çalışıyor.
+      INTERNAL_SERVICE_IN_PROCESS: "1"
+      LANGGRAPH_CHECKPOINT_DB: ${LANGGRAPH_CHECKPOINT_DB:-/opt/api/listener.db}
+      SOCIAL_PUBLISH_LIVE: ${SOCIAL_PUBLISH_LIVE:-0}
+      CHAT_USE_LLM: ${CHAT_USE_LLM:-1}
+      NL_PARSER_USE_LLM: ${NL_PARSER_USE_LLM:-1}
+      FERNET_KEY: ${FERNET_KEY:-}
+    volumes:
+      - agent_base_media:/data/media
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+    container_name: agent-base-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${AGENTBASE_MYSQL_ROOT_PASSWORD:-agentbase_root}
+      MYSQL_DATABASE: ${AGENTBASE_MYSQL_DATABASE:-agentbase}
+      MYSQL_USER: ${AGENTBASE_MYSQL_USER:-agentbase}
+      MYSQL_PASSWORD: ${AGENTBASE_MYSQL_PASSWORD:-agentbase_pass}
+    volumes:
+      - agent_base_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: agent-base-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  agent_base_media:
+  agent_base_mysql:

@@ -1,0 +1,19 @@
+node_modules
+dist
+# Kok .env compose tarafindan build-arg olarak okunur; imaja kopyalanmasin (tutarli VITE_*).
+.env
+.git
+.gitignore
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+coverage
+*.local
+.venv
+agent-base-api/.venv
+agent-base-api/.git
+agent-base-api/__pycache__
+agent-base-api/.pytest_cache
+agent-base-api/.mypy_cache
+agent-base-api/dump.rdb

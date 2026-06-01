@@ -1,0 +1,48 @@
+server {
+  listen 80 default_server;
+  server_name ${NGINX_SERVER_NAME};
+
+  client_max_body_size 100m;
+
+  root /usr/share/nginx/html;
+  index index.html;
+
+  # Yerel medya (MEDIA_STORAGE=local); API ile aynı volume: /data/media
+  location /media/ {
+    alias /data/media/;
+    add_header Cache-Control "public, max-age=3600";
+    types {
+      image/jpeg jpeg jpg;
+      image/png png;
+      image/webp webp;
+      image/gif gif;
+      video/mp4 mp4;
+      video/webm webm;
+    }
+    default_type application/octet-stream;
+  }
+
+  # Backend API proxy: frontend can use /api/*.
+  location /api/ {
+    proxy_pass http://127.0.0.1:8000/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_connect_timeout 60s;
+    proxy_send_timeout 300s;
+    proxy_read_timeout 300s;
+  }
+
+  # SPA fallback for React Router
+  location / {
+    try_files $uri $uri/ /index.html;
+  }
+
+  # Cache immutable build assets aggressively
+  location /assets/ {
+    expires 1y;
+    add_header Cache-Control "public, immutable";
+  }
+}

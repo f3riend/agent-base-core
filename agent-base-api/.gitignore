@@ -1,0 +1,10 @@
+.env
+*.env
+*.json
+agentbase-*.json
+uploads/
+data/media/
+__pycache__/
+*.pyc
+*.pyo
+*.log

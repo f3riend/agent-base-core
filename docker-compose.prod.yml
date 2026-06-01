@@ -1,0 +1,16 @@
+# Tracked in git as the canonical "host-MySQL + host-bind-media" overlay.
+# Use:  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Or:   make up-prod
+# Mirrors docker-compose.override.yml so the prod stack survives even if
+# override.yml is deleted by `git clean`.
+#
+# DB: handled by root .env DOCKER_DATABASE_URL — base docker-compose.yml maps
+# DOCKER_DATABASE_URL -> DATABASE_URL, so nothing to override here.
+services:
+  agent-base-allinone:
+    environment:
+      MEDIA_PUBLIC_BASE_URL: https://agentbase.boximgs.com
+    volumes:
+      - /home/agentbase/agentbase/media:/data/media
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

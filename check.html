@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>FB + IG + OpenAI Panel</title>
+
+<style>
+body { font-family: Arial; background:#f4f6f9; padding:20px; }
+.container { max-width:1100px; margin:auto; background:white; padding:20px; border-radius:12px; }
+input { width:100%; padding:10px; margin:5px 0; }
+button { padding:10px 15px; cursor:pointer; margin-top:5px; }
+
+.grid { display:flex; flex-wrap:wrap; gap:20px; margin-top:20px; }
+.card {
+  width:180px; padding:15px; text-align:center;
+  border-radius:12px; background:#fafafa; border:2px solid transparent;
+  cursor:pointer;
+}
+.card.active { border:2px solid #E1306C; }
+.avatar { width:80px; height:80px; border-radius:50%; }
+
+.section { margin-top:30px; padding:15px; background:#f9fafb; border-radius:10px; }
+
+.status-ok { color:green; }
+.status-bad { color:red; }
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>Facebook / Instagram</h2>
+<input id="token" placeholder="Access Token gir"/>
+<button onclick="loadAccounts()">Hesapları Getir</button>
+
+<div id="grid" class="grid"></div>
+
+<div class="section">
+<h2>OpenAI API Kontrol</h2>
+<input id="openai" placeholder="OpenAI API Key (sk-...)"/>
+<button onclick="checkOpenAI()">Kontrol Et</button>
+
+<div id="openaiResult"></div>
+</div>
+
+</div>
+
+<script>
+let selectedAccount = null;
+
+/* ---------------- FB + IG ---------------- */
+
+async function loadAccounts() {
+  const token = document.getElementById("token").value.trim();
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "Yükleniyor...";
+
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/v22.0/me/accounts?fields=id,name,picture{url},instagram_business_account{id,username,profile_picture_url}&access_token=${token}`
+    );
+
+    const data = await res.json();
+    grid.innerHTML = "";
+
+    data.data.forEach(page => {
+      const ig = page.instagram_business_account;
+
+      grid.innerHTML += createCard(page.id, "facebook", page.name, page.picture?.data?.url);
+
+      if (ig) {
+        grid.innerHTML += createCard(ig.id, "instagram", "@"+ig.username, ig.profile_picture_url);
+      }
+    });
+
+  } catch (err) {
+    grid.innerHTML = "Hata: " + err.message;
+  }
+}
+
+function createCard(id, type, name, image) {
+  return `
+  <div class="card" onclick="selectAccount(event,'${id}','${type}')">
+    <img class="avatar" src="${image || 'https://via.placeholder.com/80'}"/>
+    <div><b>${name}</b></div>
+    <div>${type}</div>
+  </div>`;
+}
+
+function selectAccount(e,id,type){
+  document.querySelectorAll(".card").forEach(c=>c.classList.remove("active"));
+  e.currentTarget.classList.add("active");
+  selectedAccount = {id,type};
+}
+
+/* ---------------- OPENAI ---------------- */
+
+async function checkOpenAI() {
+  const key = document.getElementById("openai").value.trim();
+  const resultDiv = document.getElementById("openaiResult");
+
+  resultDiv.innerHTML = "Kontrol ediliyor...";
+
+  try {
+
+    /* 1. MODEL LIST */
+    const modelsRes = await fetch("https://api.openai.com/v1/models", {
+      headers: { "Authorization": "Bearer " + key }
+    });
+
+    if (modelsRes.status === 401) {
+      resultDiv.innerHTML = `<p class="status-bad">❌ API key geçersiz</p>`;
+      return;
+    }
+
+    if (modelsRes.status === 429) {
+      resultDiv.innerHTML = `<p class="status-bad">⚠️ Rate limit / kota dolmuş</p>`;
+      return;
+    }
+
+    const modelsData = await modelsRes.json();
+    const models = modelsData.data.map(m => m.id);
+
+    const supports = {
+      gpt4o: models.includes("gpt-4o"),
+      img15: models.includes("gpt-image-1"),
+      img2: models.includes("gpt-image-2")
+    };
+
+    /* 2. TEST REQUEST (token usage) */
+    const testRes = await fetch("https://api.openai.com/v1/chat/completions", {
+      method:"POST",
+      headers:{
+        "Authorization":"Bearer "+key,
+        "Content-Type":"application/json"
+      },
+      body: JSON.stringify({
+        model:"gpt-4o",
+        messages:[{role:"user", content:"hi"}],
+        max_tokens:10
+      })
+    });
+
+    const testData = await testRes.json();
+
+    let usageHTML = "";
+    if (testData.usage) {
+      const tokens = testData.usage.total_tokens;
+      const cost = tokens * 0.000005; // approx
+
+      usageHTML = `
+        <p>Toplam Token: ${tokens}</p>
+        <p>Tahmini Maliyet: $${cost.toFixed(6)}</p>
+      `;
+    }
+
+    /* FINAL UI */
+    resultDiv.innerHTML = `
+      <p class="status-ok">✅ API Key geçerli</p>
+
+      <h4>Model Erişimi:</h4>
+      <ul>
+        <li>gpt-4o: ${supports.gpt4o ? "✅" : "❌"}</li>
+        <li>gpt-image-1.5: ${supports.img15 ? "✅" : "❌"}</li>
+        <li>gpt-image-2: ${supports.img2 ? "✅" : "❌"}</li>
+      </ul>
+
+      <h4>Usage:</h4>
+      ${usageHTML || "Kullanım bilgisi alınamadı"}
+
+      <p>Durum: Aktif / Çalışıyor</p>
+    `;
+
+  } catch (err) {
+    resultDiv.innerHTML = `<p class="status-bad">Hata: ${err.message}</p>`;
+  }
+}
+</script>
+
+</body>
+</html>

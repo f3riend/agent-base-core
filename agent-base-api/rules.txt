@@ -1,0 +1,5 @@
+RULE welcome_instagram_post_store_created
+WHEN
+store.created
+THEN
+workflow welcome_instagram_post

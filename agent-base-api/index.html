@@ -1,0 +1,1783 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Operasyon Merkezi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --line: #e6e8ee;
+      --ink: #0f172a;
+      --muted: #6b7280;
+      --soft: #f3f4f7;
+      --accent: #4f46e5;
+      --accent-soft: #eef2ff;
+      --ai: #6366f1;
+      --good: #15803d;
+      --warn: #b45309;
+      --bad:  #b91c1c;
+    }
+    html, body { background: var(--bg); }
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; color: var(--ink); }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 20px -16px rgba(15,23,42,.10); }
+    .panel-soft { background: var(--soft); border-radius: 12px; }
+    .chip { display: inline-flex; align-items: center; gap: .35rem; padding: .15rem .55rem; border-radius: 999px; font-size: .68rem; font-weight: 500; border: 1px solid var(--line); background: #fff; color: var(--muted); white-space: nowrap; }
+    .chip-ai     { background: linear-gradient(135deg, #eef2ff, #f5f3ff); color: var(--ai); border-color: #e0e7ff; }
+    .chip-good   { background: #f0fdf4; color: var(--good); border-color: #dcfce7; }
+    .chip-warn   { background: #fffbeb; color: var(--warn); border-color: #fef3c7; }
+    .chip-bad    { background: #fef2f2; color: var(--bad);  border-color: #fee2e2; }
+    .chip-neutral{ background: #f3f4f6; color: #374151; border-color: #e5e7eb; }
+    .dot { width:.5rem; height:.5rem; border-radius:999px; display:inline-block; }
+    .live-dot { animation: live 1.8s ease-in-out infinite; }
+    @keyframes live { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.92)} }
+    .scroll { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+    .scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+    .ghost-btn { padding: .45rem .85rem; border-radius: 10px; border: 1px solid var(--line); background: #fff; font-size: .82rem; color: #334155; transition: background .15s ease; }
+    .ghost-btn:hover { background: #f9fafb; }
+    .ghost-btn:disabled { opacity: .55; cursor: not-allowed; }
+    .primary-btn { padding: .55rem 1rem; border-radius: 10px; background: var(--ink); color: #fff; font-size: .85rem; font-weight: 500; transition: opacity .15s ease; }
+    .primary-btn:hover { opacity: .9; }
+    .primary-btn:disabled { opacity: .55; cursor: not-allowed; }
+    .danger-btn { padding: .45rem .85rem; border-radius: 10px; background: #fef2f2; color: var(--bad); font-size: .82rem; border: 1px solid #fee2e2; }
+    .danger-btn:hover { background: #fee2e2; }
+    .accent-btn { padding: .55rem 1rem; border-radius: 10px; background: var(--accent); color: #fff; font-size: .85rem; font-weight: 500; }
+    .accent-btn:hover { opacity: .9; }
+    .section-title { font-size: .82rem; font-weight: 600; color: #111827; letter-spacing: .01em; }
+    .muted { color: var(--muted); }
+    .pill-num { font-variant-numeric: tabular-nums; }
+    details > summary { list-style: none; cursor: pointer; }
+    details > summary::-webkit-details-marker { display: none; }
+    .fade-in { animation: fadeIn .25s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+    /* tabs */
+    .tab-btn { padding: .55rem 1rem; border-radius: 10px; font-size: .85rem; font-weight: 500; color: #475569; transition: all .15s ease; border: 1px solid transparent; }
+    .tab-btn:hover { background: #f3f4f7; color: #1f2937; }
+    .tab-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+    /* chat */
+    .chat-bubble { max-width: 92%; padding: .65rem .85rem; border-radius: 14px; line-height: 1.5; font-size: .88rem; word-wrap: break-word; }
+    .chat-user { background: var(--accent); color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+    .chat-ai   { background: #f3f4f7; color: var(--ink); align-self: flex-start; border-bottom-left-radius: 4px; }
+    .chat-ai b, .chat-ai strong { color: var(--accent); font-weight: 600; }
+    .chat-meta { font-size: .65rem; color: var(--muted); margin: .15rem .15rem 0; display: flex; gap: .35rem; align-items: center; flex-wrap: wrap; }
+    .stage-line { font-size: .76rem; color: var(--muted); padding: .35rem .65rem; border-radius: 10px; background: #f6f5ff; border: 1px solid #ece9ff; display: flex; align-items: center; gap: .45rem; opacity: 0; transform: translateY(2px); transition: opacity .2s ease, transform .2s ease; }
+    .stage-line.shown { opacity: 1; transform: none; }
+    .stage-line.done  { background: #f5f7fb; border-color: #e8eaf0; color: #475569; }
+    .stage-line .dots { display: inline-flex; gap: 2px; }
+    .stage-line .dots span { width: 4px; height: 4px; border-radius: 999px; background: var(--ai); animation: dot-bounce 1s infinite ease-in-out; }
+    .stage-line .dots span:nth-child(2) { animation-delay: .15s; }
+    .stage-line .dots span:nth-child(3) { animation-delay: .3s; }
+    .stage-line.done .dots span { animation: none; background: #cbd5e1; }
+    @keyframes dot-bounce { 0%, 80%, 100% { transform: translateY(0); opacity: .5; } 40% { transform: translateY(-3px); opacity: 1; } }
+    /* timeline */
+    .timeline-item { display: flex; gap: .75rem; padding: .55rem .25rem; border-bottom: 1px dashed #eef0f4; transition: background .15s ease; }
+    .timeline-item:hover { background: #fafbff; }
+    .timeline-item:last-child { border-bottom: 0; }
+    .tone-positive .timeline-icon { background: #ecfdf5; color: #047857; }
+    .tone-negative .timeline-icon { background: #fef2f2; color: #b91c1c; }
+    .tone-warning  .timeline-icon { background: #fffbeb; color: #92400e; }
+    .tone-ai       .timeline-icon { background: #eef2ff; color: #4338ca; }
+    .tone-neutral  .timeline-icon { background: #f3f4f6; color: #475569; }
+    .timeline-icon { width: 32px; height: 32px; border-radius: 999px; display: grid; place-items: center; font-size: .9rem; flex-shrink: 0; }
+    /* kpi */
+    .kpi-num { font-size: 1.55rem; font-weight: 700; letter-spacing: -.02em; }
+    .kpi-label { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 500; }
+    /* reasoning */
+    .reasoning-row { font-size: .78rem; color: #374151; padding: .55rem .75rem; border-radius: 10px; border: 1px solid var(--line); background: #fff; }
+    .tag-AI_REASONING            { background: #eef2ff; color: #4338ca; }
+    .tag-AUTONOMOUS_PLAN         { background: #ecfdf5; color: #047857; }
+    .tag-BUSINESS_SIGNAL         { background: #fffbeb; color: #92400e; }
+    .tag-CROSS_EVENT_REASONING   { background: #fdf4ff; color: #86198f; }
+    .tag-TOOL_SELECTION          { background: #f1f5f9; color: #334155; }
+    .tag-APPROVAL_REQUIRED       { background: #fef2f2; color: #b91c1c; }
+    .tag-ROUTING                 { background: #f5f3ff; color: #5b21b6; }
+    .tag-RULE_EXECUTION_START    { background: #ecfdf5; color: #065f46; }
+    .tag-RULE_EXECUTION_END      { background: #f0f9ff; color: #0c4a6e; }
+    .tag-CONTENT_GENERATED       { background: #eef2ff; color: #4338ca; }
+    .tag-RISK_ASSESSED           { background: #fffbeb; color: #b45309; }
+    .tag-APPROVAL_REQUESTED      { background: #fef2f2; color: #b91c1c; }
+    .tag-PUBLISH_DONE            { background: #ecfdf5; color: #047857; }
+    .tag-MONITOR_SCHEDULED       { background: #f0f9ff; color: #075985; }
+    /* rule editor */
+    .rule-stepper { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
+    .step { display: inline-flex; align-items: center; gap: .35rem; padding: .25rem .65rem; border-radius: 999px; font-size: .7rem; font-weight: 500; border: 1px solid var(--line); background: #fff; color: #475569; }
+    .step.done    { background: #ecfdf5; border-color: #bbf7d0; color: #047857; }
+    .step.current { background: #eef2ff; border-color: #c7d2fe; color: #4338ca; }
+    .step.cancelled { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+    .step-arrow { color: #cbd5e1; font-size: .85rem; }
+    .nl-input { border: 1px solid var(--line); border-radius: 14px; padding: 1rem 1.1rem; font-size: .95rem; line-height: 1.5; min-height: 5.5rem; width: 100%; transition: border-color .15s ease, box-shadow .15s ease; background: #fff; resize: vertical; }
+    .nl-input:focus { outline: none; border-color: #c7d2fe; box-shadow: 0 0 0 3px rgba(99,102,241,.08); }
+    .skeleton { background: linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 8px; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  </style>
+</head>
+<body class="min-h-screen">
+
+<header class="sticky top-0 z-40 backdrop-blur bg-white/90 border-b border-slate-200">
+  <div class="max-w-[1480px] mx-auto px-6 py-3 flex items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 grid place-items-center text-white text-sm font-bold">AI</div>
+      <div>
+        <div class="text-[15px] font-semibold leading-tight">AI Operasyon Merkezi</div>
+        <div class="text-[11px] muted leading-tight">İşletmeni yapay zekayla birlikte yönet</div>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="chip"><span class="dot bg-emerald-500 live-dot"></span>canlı</span>
+      <span id="pressurePill" class="chip">baskı —</span>
+      <span id="lastRefresh" class="text-[11px] muted hidden md:inline">—</span>
+      <button onclick="App.refreshActiveTab(true)" class="ghost-btn">Yenile</button>
+      <button onclick="App.runSeed()" class="primary-btn">Test verisi</button>
+    </div>
+  </div>
+
+  <nav class="max-w-[1480px] mx-auto px-6 pb-3 flex gap-1.5 overflow-x-auto">
+    <button onclick="App.switchTab('overview')"  class="tab-btn"      data-tab="overview">Genel Bakış</button>
+    <button onclick="App.switchTab('operator')"  class="tab-btn"      data-tab="operator">AI Operatör</button>
+    <button onclick="App.switchTab('rules')"     class="tab-btn"      data-tab="rules">Kurallar</button>
+    <button onclick="App.switchTab('ops')"       class="tab-btn"      data-tab="ops">Operasyon</button>
+    <button onclick="App.switchTab('approvals')" class="tab-btn"      data-tab="approvals">Onaylar <span id="approvalsBadge" class="hidden ml-1 chip chip-warn">0</span></button>
+  </nav>
+</header>
+
+<main class="max-w-[1480px] mx-auto px-6 py-6">
+
+  <!-- =================================================================== -->
+  <!--  TAB: GENEL BAKIŞ                                                    -->
+  <!-- =================================================================== -->
+  <section id="tab-overview" class="tab-content space-y-6">
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3" id="kpiStrip"></div>
+
+    <div class="grid grid-cols-12 gap-6">
+      <div class="col-span-12 lg:col-span-8 space-y-6">
+        <div class="panel p-5">
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <div class="section-title">İş Sinyalleri</div>
+              <p class="text-[12px] muted">AI'ın gözüne çarpan operasyonel fırsatlar ve riskler.</p>
+            </div>
+            <span id="insightCount" class="chip chip-neutral">—</span>
+          </div>
+          <div id="insightCards" class="grid grid-cols-1 md:grid-cols-2 gap-2.5"></div>
+        </div>
+        <div class="panel p-5">
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <div class="section-title">Operasyonel Akış</div>
+              <p class="text-[12px] muted">İşletmenin son hareketleri — ham log değil, anlatı.</p>
+            </div>
+            <span id="timelineCount" class="chip chip-neutral">—</span>
+          </div>
+          <div id="timelineList" class="scroll max-h-[480px] overflow-auto pr-1"></div>
+        </div>
+      </div>
+
+      <div class="col-span-12 lg:col-span-4 space-y-6">
+        <div class="panel p-5">
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <div class="section-title">AI Düşünce Akışı</div>
+              <p class="text-[12px] muted">Karar verirken neye baktı.</p>
+            </div>
+            <span id="reasoningCount" class="chip chip-neutral">—</span>
+          </div>
+          <div id="reasoningFeed" class="scroll max-h-[420px] overflow-auto space-y-1.5 pr-1"></div>
+        </div>
+        <div class="panel p-5">
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <div class="section-title">AI Hafızası</div>
+              <p class="text-[12px] muted">Ne işe yaradı, ne reddedildi.</p>
+            </div>
+          </div>
+          <div id="memoryList" class="space-y-1.5"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =================================================================== -->
+  <!--  TAB: AI OPERATÖR                                                    -->
+  <!-- =================================================================== -->
+  <section id="tab-operator" class="tab-content hidden space-y-6">
+    <div class="grid grid-cols-12 gap-6">
+      <div class="col-span-12 lg:col-span-8">
+        <div class="panel p-5">
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <div class="section-title">AI Operatör</div>
+              <p class="text-[12px] muted">Stok, satış, kampanya, müşteri, kargo… veriyi gerçek zamanlı sorgular. Çoklu tur sürdürür.</p>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span id="chatModeChip" class="chip chip-ai"><span class="dot bg-indigo-500"></span>llm</span>
+              <button onclick="App.resetSession()" class="chip hover:border-indigo-300" title="Yeni konuşma başlat">↺ yeni</button>
+            </div>
+          </div>
+          <div id="chatLog" class="scroll h-[440px] overflow-auto flex flex-col gap-3 p-3 panel-soft mb-3"></div>
+          <div class="flex flex-wrap gap-1.5 mb-2" id="quickAsk"></div>
+          <div class="flex gap-2 mb-1.5">
+            <input id="chatInput" type="text" autocomplete="off"
+              class="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              placeholder="Hangi ürün en çok satıyor? Peki neden? Onu Instagram'da öne çıkaralım." />
+            <button id="chatSend" onclick="App.sendChat()" class="primary-btn pill-num">Sor</button>
+          </div>
+          <div class="text-[11px] muted" id="sessionPill"></div>
+        </div>
+      </div>
+
+      <div class="col-span-12 lg:col-span-4">
+        <div class="panel p-5">
+          <div class="section-title mb-2">Hızlı Sorular</div>
+          <p class="text-[12px] muted mb-3">Çoğu operatör bunları soruyor.</p>
+          <div id="quickAskFull" class="space-y-1.5"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =================================================================== -->
+  <!--  TAB: KURALLAR                                                       -->
+  <!-- =================================================================== -->
+  <section id="tab-rules" class="tab-content hidden space-y-6">
+
+    <!-- Hazır şablonlar -->
+    <div class="panel p-5">
+      <div class="flex items-start justify-between mb-3">
+        <div>
+          <div class="section-title">Hazır Kural Şablonları</div>
+          <p class="text-[12px] muted">Bir şablon seç, gerekli alanları doldur — kural anında hazır.</p>
+        </div>
+        <span id="templatesCount" class="chip chip-neutral">—</span>
+      </div>
+      <div id="templatesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5"></div>
+    </div>
+
+    <div id="conflictsBanner" class="hidden panel p-4" style="border-color:#fed7aa;background:#fff7ed">
+      <div class="flex items-start gap-3">
+        <div class="text-[18px]">⚠️</div>
+        <div class="flex-1">
+          <div class="section-title text-amber-800">Kural Çakışmaları</div>
+          <p class="text-[11px] text-amber-700">Aynı tetik için birden fazla aktif kural var — çözüm önerileri:</p>
+          <div id="conflictsList" class="text-[12.5px] text-amber-900 mt-1.5 space-y-2"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tur 3: Öğrenme önerileri paneli -->
+    <div id="learningPanel" class="hidden panel p-5">
+      <div class="flex items-start justify-between mb-3">
+        <div>
+          <div class="section-title">AI Öğrenme Önerileri</div>
+          <p class="text-[12px] muted">Çalışma geçmişine dayalı, kurallar için iyileştirme tavsiyeleri.</p>
+        </div>
+        <div id="learningOverview" class="text-[11px] muted"></div>
+      </div>
+      <div id="learningList" class="space-y-2"></div>
+    </div>
+
+    <div class="grid grid-cols-12 gap-6">
+
+      <div class="col-span-12 lg:col-span-7">
+        <div class="panel p-6">
+          <div class="section-title">Yeni Kural Oluştur</div>
+          <p class="text-[12px] muted mt-1 mb-4">
+            Aklındaki kuralı doğal Türkçe ile yaz — örneğin
+            <em>"Yeni mağaza oluştuktan 3 gün sonra Çanakkale hesabında Anneler Günü şablonu kullanarak Instagram paylaşımı yap."</em>
+            AI bunu yapılandırılmış bir kurala çevirir; sen onaylarsan
+            sistem işletim merkezinin parçası olur.
+          </p>
+
+          <textarea id="ruleNlInput" rows="3" class="nl-input"
+            placeholder="Niyetini Türkçe yaz... örneğin: Yeni mağaza oluştuktan 3 gün sonra Çanakkale hesabında Anneler Günü şablonu kullanarak Instagram paylaşımı yap."></textarea>
+
+          <div class="flex flex-wrap gap-2 mt-3">
+            <button onclick="App.parseRule()" class="ghost-btn">Önizle</button>
+            <button id="ruleSaveBtn" onclick="App.saveRule()" class="accent-btn" disabled>Kuralı Etkinleştir</button>
+            <button onclick="App.testRule()" class="ghost-btn" id="ruleTestBtn" disabled>Test Çalıştır</button>
+            <button onclick="App.clearRuleEditor()" class="ghost-btn">Temizle</button>
+          </div>
+
+          <div id="ruleParseSummary" class="mt-5 hidden">
+            <div class="panel-soft p-4 space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="section-title">AI Yorumu</div>
+                <span id="ruleConfidence" class="chip chip-ai">—</span>
+              </div>
+              <div id="ruleExplanation" class="text-[13px] leading-relaxed text-slate-700"></div>
+              <div id="ruleStepper" class="rule-stepper"></div>
+              <div id="ruleMissingFields" class="text-[12px] text-amber-700"></div>
+            </div>
+          </div>
+
+          <div id="ruleTestResult" class="mt-5 hidden">
+            <div class="panel-soft p-4 space-y-2">
+              <div class="flex items-center justify-between">
+                <div class="section-title">Test Sonucu</div>
+                <span id="ruleTestStatus" class="chip">—</span>
+              </div>
+              <div id="ruleTestTraces" class="space-y-1.5"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-span-12 lg:col-span-5 space-y-6">
+        <div class="panel p-5">
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <div class="section-title">Aktif Kurallar</div>
+              <p class="text-[12px] muted">Tetiklenmeyi bekleyen tüm AI kuralları.</p>
+            </div>
+            <span id="rulesCount" class="chip chip-neutral">—</span>
+          </div>
+          <div id="rulesList" class="space-y-2"></div>
+        </div>
+
+        <div class="panel p-5">
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <div class="section-title">Son Yürütmeler</div>
+              <p class="text-[12px] muted">Tetiklenmiş ve henüz çalışan/biten kural akışları.</p>
+            </div>
+            <span id="executionsCount" class="chip chip-neutral">—</span>
+          </div>
+          <div id="executionsList" class="space-y-2"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =================================================================== -->
+  <!--  TAB: OPERASYON  (calendar / campaigns / customers / workflows)      -->
+  <!-- =================================================================== -->
+  <section id="tab-ops" class="tab-content hidden space-y-6">
+    <div class="grid grid-cols-12 gap-6">
+      <div class="col-span-12 lg:col-span-6 space-y-6">
+        <div class="panel p-5">
+          <div class="section-title mb-3">Aktif İş Akışları</div>
+          <div id="workflowsList" class="space-y-1.5"></div>
+        </div>
+        <div class="panel p-5">
+          <div class="section-title mb-3">Kampanyalar</div>
+          <div id="campaignsList" class="space-y-2"></div>
+        </div>
+      </div>
+      <div class="col-span-12 lg:col-span-6 space-y-6">
+        <div class="panel p-5">
+          <div class="section-title mb-3">Müşteri Konuşmaları</div>
+          <div id="customerThreadsList" class="space-y-2"></div>
+        </div>
+        <div class="panel p-5">
+          <div class="section-title mb-3">Planlanan İşler</div>
+          <div id="schedulesList" class="space-y-2"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =================================================================== -->
+  <!--  TAB: ONAYLAR                                                        -->
+  <!-- =================================================================== -->
+  <section id="tab-approvals" class="tab-content hidden">
+    <div class="panel p-5">
+      <div class="flex items-start justify-between mb-3">
+        <div>
+          <div class="section-title">Onay Merkezi</div>
+          <p class="text-[12px] muted">İnsan kararı bekleyen AI önerileri ve kural yürütmeleri.</p>
+        </div>
+        <span id="approvalsHeaderCount" class="chip chip-warn">—</span>
+      </div>
+      <div id="approvalsList" class="space-y-3"></div>
+
+      <div class="mt-6">
+        <div class="section-title mb-2">Bekleyen Kural Yürütmeleri</div>
+        <div id="waitingExecutionsList" class="space-y-2"></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+//============================================================================
+// AI Operasyon Merkezi — single-page JS app
+// 5 tablar: overview, operator, rules, ops, approvals
+//============================================================================
+
+const API = "/api/internal";
+
+const App = {
+  state: {
+    activeTab: "overview",
+    parsedRule: null,
+    chatSessionId: null,
+    sessionMeta: { turnCount: 0, activeEntity: null },
+  },
+  hashes: {},
+  focus: { active: false, restoreAt: 0 },
+
+  init() {
+    this._installFocusGuard();
+    this._installEnter();
+    this._initTabs();
+    this._renderQuickAsk();
+    this._greet();
+    this.switchTab("overview");
+    this._startPolling();
+  },
+
+  // ----- focus protection ---------------------------------------------
+  _installFocusGuard() {
+    document.addEventListener("focusin", (e) => {
+      if (e.target.matches("input, textarea, select, [contenteditable=true]")) {
+        this.focus.active = true;
+      }
+    });
+    document.addEventListener("focusout", () => {
+      this.focus.active = false;
+      this.focus.restoreAt = Date.now() + 1200;
+    });
+  },
+  _canRefresh() {
+    if (this.focus.active) return false;
+    if (Date.now() < this.focus.restoreAt) return false;
+    return true;
+  },
+  _hash(obj) {
+    try { return JSON.stringify(obj); } catch (e) { return Math.random().toString(); }
+  },
+  _setIfChanged(key, value, render) {
+    const h = this._hash(value);
+    if (this.hashes[key] === h) return;
+    this.hashes[key] = h;
+    try { render(value); } catch (e) { console.error("render failed", key, e); }
+  },
+
+  // ----- HTTP -----------------------------------------------------------
+  async _get(path) {
+    const r = await fetch(API + path);
+    if (!r.ok) throw new Error(`${path} ${r.status}`);
+    return r.json();
+  },
+  async _post(path, body) {
+    const r = await fetch(API + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+    });
+    if (!r.ok) {
+      let detail = "";
+      try { detail = (await r.json()).detail || ""; } catch (e) {}
+      throw new Error(`${path} ${r.status} ${detail}`);
+    }
+    return r.json();
+  },
+  async _patch(path, body) {
+    const r = await fetch(API + path, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+    });
+    if (!r.ok) throw new Error(`${path} ${r.status}`);
+    return r.json();
+  },
+  async _delete(path) {
+    const r = await fetch(API + path, { method: "DELETE" });
+    if (!r.ok) throw new Error(`${path} ${r.status}`);
+    return r.json();
+  },
+
+  // ----- tabs -----------------------------------------------------------
+  _initTabs() {
+    document.querySelectorAll(".tab-btn").forEach(btn => {
+      if (btn.dataset.tab === "overview") btn.classList.add("active");
+    });
+  },
+  switchTab(name) {
+    this.state.activeTab = name;
+    document.querySelectorAll(".tab-content").forEach(sec => sec.classList.add("hidden"));
+    document.getElementById("tab-" + name).classList.remove("hidden");
+    document.querySelectorAll(".tab-btn").forEach(b => {
+      b.classList.toggle("active", b.dataset.tab === name);
+    });
+    this.refreshActiveTab(true);
+  },
+
+  refreshActiveTab(force) {
+    const now = new Date();
+    document.getElementById("lastRefresh").textContent =
+      now.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    if (!force && !this._canRefresh()) return;
+    switch (this.state.activeTab) {
+      case "overview":
+        this.refreshKpi(); this.refreshInsights(); this.refreshTimeline();
+        this.refreshReasoning(); this.refreshMemory(); this.refreshPressure();
+        break;
+      case "rules":
+        this.refreshRules(); this.refreshExecutions();
+        this.refreshTemplates(); this.refreshConflicts();
+        this.refreshLearning();
+        break;
+      case "ops":
+        this.refreshWorkflows(); this.refreshCampaigns();
+        this.refreshCustomerThreads(); this.refreshSchedules();
+        break;
+      case "approvals":
+        this.refreshApprovals(); this.refreshExecutions();
+        break;
+    }
+    // approval badge ve kpi her zaman güncellensin
+    this.refreshApprovalBadge();
+    if (this.state.activeTab !== "overview") this.refreshKpi();
+  },
+
+  _startPolling() {
+    setInterval(() => this.refreshActiveTab(false), 11000);
+    setInterval(() => this.refreshApprovalBadge(), 9000);
+    setInterval(() => this.refreshPressure(), 17000);
+  },
+
+  // ----- KPI ------------------------------------------------------------
+  async refreshKpi() {
+    if (!this._canRefresh()) return;
+    let m = {}, p = {};
+    try { m = await this._get("/dashboard-metrics"); } catch (e) {}
+    try { p = await this._get("/orchestration-health"); } catch (e) {}
+    const data = { ...m, ...p };
+    this._setIfChanged("kpi", data, () => this._renderKpi(data));
+  },
+  _renderKpi(d) {
+    const cards = [
+      { label: "Satış",          value: d.revenue_units ?? 0,
+        trend: d.sales_trend === "up" ? "↑ ivme" : (d.sales_trend === "down" ? "↓ düşüş" : "düz"),
+        trendCls: d.sales_trend === "up" ? "chip-good" : (d.sales_trend === "down" ? "chip-bad" : "chip-neutral") },
+      { label: "Stok sağlığı",    value: humanizeStockHealth(d.stock_health),
+        trend: stockTrendLabel(d.stock_health),
+        trendCls: d.stock_health === "healthy" ? "chip-good" : (d.stock_health === "warning" ? "chip-warn" : "chip-bad") },
+      { label: "Aktif iş akışı",  value: d.active_workflows ?? 0,
+        trend: (d.active_workflows ?? 0) > 0 ? "çalışıyor" : "boşta",
+        trendCls: (d.active_workflows ?? 0) > 0 ? "chip-good" : "chip-neutral" },
+      { label: "Onay bekleyen",   value: d.pending_approvals ?? 0,
+        trend: (d.pending_approvals ?? 0) > 0 ? "incele" : "temiz",
+        trendCls: (d.pending_approvals ?? 0) > 0 ? "chip-warn" : "chip-good" },
+      { label: "Trend ürün",      value: (d.trending_products || []).length,
+        trend: (d.trending_products || []).length > 0 ? "var" : "—",
+        trendCls: (d.trending_products || []).length > 0 ? "chip-good" : "chip-neutral" },
+      { label: "Hata kuyruğu",    value: d.dead_letter_tasks ?? 0,
+        trend: (d.dead_letter_tasks ?? 0) > 0 ? "bak" : "—",
+        trendCls: (d.dead_letter_tasks ?? 0) > 0 ? "chip-bad" : "chip-neutral" },
+    ];
+    const strip = document.getElementById("kpiStrip");
+    strip.innerHTML = cards.map(c => `
+      <div class="panel p-4">
+        <div class="kpi-label">${escapeHtml(c.label)}</div>
+        <div class="flex items-baseline gap-2 mt-1">
+          <span class="kpi-num pill-num">${escapeHtml(c.value.toString())}</span>
+          <span class="chip ${c.trendCls}">${escapeHtml(c.trend)}</span>
+        </div>
+      </div>
+    `).join("");
+  },
+
+  // ----- Insights -------------------------------------------------------
+  async refreshInsights() {
+    if (!this._canRefresh()) return;
+    try {
+      const r = await this._get("/insight-cards");
+      this._setIfChanged("insights", r.data || [], (d) => this._renderInsights(d));
+    } catch (e) {}
+  },
+  _renderInsights(cards) {
+    const root = document.getElementById("insightCards");
+    document.getElementById("insightCount").textContent = `${cards.length} sinyal`;
+    if (!cards.length) {
+      root.innerHTML = '<div class="text-[12px] muted">Şu an dikkat çeken bir sinyal yok — operasyon stabil.</div>';
+      return;
+    }
+    const sevLabel = (s) => ({ high: "yüksek", medium: "orta", low: "düşük" }[s] || "—");
+    const sevCls = (s) => s === "high" ? "chip-bad" : (s === "medium" ? "chip-warn" : "chip-neutral");
+    root.innerHTML = cards.map(c => `
+      <div class="panel-soft p-3 fade-in">
+        <div class="flex items-center gap-1.5 mb-1">
+          <span class="chip ${sevCls(c.severity)}">${escapeHtml(sevLabel(c.severity))}</span>
+          <span class="text-[10.5px] muted">${escapeHtml(c.kind === 'bi' ? 'iş zekası' : 'çapraz analiz')}</span>
+          <span class="text-[10.5px] muted ml-auto">güven %${Math.round((c.confidence||0)*100)}</span>
+        </div>
+        <div class="text-[13px] font-medium leading-snug">${escapeHtml(c.title || c.type)}</div>
+        <div class="text-[10.5px] muted mt-0.5">Etki: ${escapeHtml(c.impact || '—')}</div>
+        ${c.recommended_action ? `<div class="text-[11px] mt-1 text-indigo-700">→ ${escapeHtml(c.recommended_action)}</div>` : ''}
+      </div>
+    `).join("");
+  },
+
+  // ----- Timeline -------------------------------------------------------
+  async refreshTimeline() {
+    if (!this._canRefresh()) return;
+    try {
+      const r = await this._get("/humanized-timeline?limit=40");
+      this._setIfChanged("timeline", r.data || [], (d) => this._renderTimeline(d));
+    } catch (e) {}
+  },
+  _renderTimeline(items) {
+    const root = document.getElementById("timelineList");
+    document.getElementById("timelineCount").textContent = `${items.length} olay`;
+    if (!items.length) {
+      root.innerHTML = '<div class="text-[12px] muted py-6 text-center">Henüz operasyonel olay yok.</div>';
+      return;
+    }
+    root.innerHTML = items.map(it => `
+      <div class="timeline-item tone-${it.tone || 'neutral'} fade-in">
+        <div class="timeline-icon">${escapeHtml(it.icon || '•')}</div>
+        <div class="flex-1 min-w-0">
+          <div class="text-[13px] leading-snug">${escapeHtml(it.label)}</div>
+          <div class="text-[10px] muted mt-0.5">${formatTs(it.ts)}${it.synthetic ? ' · AI' : ''}</div>
+        </div>
+      </div>
+    `).join("");
+  },
+
+  // ----- Reasoning feed -------------------------------------------------
+  async refreshReasoning() {
+    if (!this._canRefresh()) return;
+    try {
+      const r = await this._get("/traces?limit=20");
+      this._setIfChanged("reasoning", r.data || [], (d) => this._renderReasoning(d));
+    } catch (e) {}
+  },
+  _renderReasoning(rows) {
+    const root = document.getElementById("reasoningFeed");
+    document.getElementById("reasoningCount").textContent = `${rows.length} iz`;
+    if (!rows.length) {
+      root.innerHTML = '<div class="text-[12px] muted">AI henüz görünür bir karar üretmedi.</div>';
+      return;
+    }
+    root.innerHTML = rows.map(r => `
+      <div class="reasoning-row fade-in">
+        <div class="flex items-center gap-1.5 mb-0.5">
+          <span class="chip tag-${escapeHtml(r.trace_tag)}">${humanizeTraceTag(r.trace_tag)}</span>
+          <span class="text-[10px] muted ml-auto">${formatTs(r.created_at)}</span>
+        </div>
+        <div class="text-[12px] text-slate-700 leading-snug">${escapeHtml(r.summary || '—')}</div>
+      </div>
+    `).join("");
+  },
+
+  // ----- Memory ---------------------------------------------------------
+  async refreshMemory() {
+    if (!this._canRefresh()) return;
+    try {
+      const r = await this._get("/memory-patterns");
+      const patterns = (r.data && r.data.patterns) || [];
+      this._setIfChanged("memory", patterns, (d) => this._renderMemory(d));
+    } catch (e) {}
+  },
+  _renderMemory(patterns) {
+    const root = document.getElementById("memoryList");
+    if (!patterns.length) {
+      root.innerHTML = '<div class="text-[12px] muted">AI henüz örüntü öğrenemedi.</div>';
+      return;
+    }
+    const toneCls = (t) => ({ positive: "chip-good", negative: "chip-bad" }[t] || "chip-neutral");
+    const toneLbl = (t) => ({ positive: "işe yarıyor", negative: "reddediliyor" }[t] || "veri toplanıyor");
+    root.innerHTML = patterns.map(p => `
+      <div class="flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg hover:bg-slate-50">
+        <span class="text-[12px]">${escapeHtml(humanizeIntent(p.intent))}</span>
+        <span class="chip ${toneCls(p.trend)}">${toneLbl(p.trend)} · ${p.total}</span>
+      </div>
+    `).join("");
+  },
+
+  // ----- Pressure -------------------------------------------------------
+  async refreshPressure() {
+    if (!this._canRefresh()) return;
+    try {
+      const r = await this._get("/operational-pressure");
+      const level = (r.data && r.data.pressure_level) || "—";
+      const pill = document.getElementById("pressurePill");
+      pill.className = "chip " + ({ "düşük":"chip-good", "orta":"chip-warn", "yüksek":"chip-bad" }[level] || "chip-neutral");
+      pill.textContent = `operasyonel baskı: ${level}`;
+    } catch (e) {}
+  },
+
+  // ----- Approval badge --------------------------------------------------
+  async refreshApprovalBadge() {
+    try {
+      const r = await this._get("/approvals");
+      const n = (r.data || []).length;
+      const badge = document.getElementById("approvalsBadge");
+      if (n > 0) {
+        badge.classList.remove("hidden");
+        badge.textContent = n;
+      } else {
+        badge.classList.add("hidden");
+      }
+    } catch (e) {}
+  },
+
+  // ============================================================
+  //  RULES tab
+  // ============================================================
+
+  async parseRule() {
+    const text = (document.getElementById("ruleNlInput").value || "").trim();
+    if (!text) return;
+    const summary = document.getElementById("ruleParseSummary");
+    summary.classList.remove("hidden");
+    document.getElementById("ruleExplanation").innerHTML = '<span class="muted">analiz ediliyor…</span>';
+    document.getElementById("ruleStepper").innerHTML = "";
+    document.getElementById("ruleMissingFields").textContent = "";
+
+    try {
+      const r = await this._post("/structured-rules/parse", { natural_language: text });
+      this.state.parsedRule = r.rule;
+      const conf = Math.round((r.parse_confidence || 0) * 100);
+      const confChip = document.getElementById("ruleConfidence");
+      confChip.textContent = `anlaşılma %${conf}`;
+      confChip.className = "chip " + (conf >= 80 ? "chip-good" : (conf >= 60 ? "chip-warn" : "chip-bad"));
+      document.getElementById("ruleExplanation").innerHTML = renderMarkdownish(r.explanation || "");
+      this._renderStepper(r.rule);
+      if (r.missing_fields && r.missing_fields.length) {
+        document.getElementById("ruleMissingFields").textContent =
+          "Eksik bilgiler: " + r.missing_fields.join(", ") + ". Daha açık yazarsan daha iyi anlarım.";
+      }
+      document.getElementById("ruleSaveBtn").disabled = false;
+      document.getElementById("ruleTestBtn").disabled = false;
+    } catch (e) {
+      document.getElementById("ruleExplanation").innerHTML =
+        `<span class="text-rose-700">Analiz başarısız: ${escapeHtml(e.message)}</span>`;
+    }
+  },
+
+  _renderStepper(rule) {
+    const actions = (rule && rule.actions) || [];
+    const root = document.getElementById("ruleStepper");
+    if (!actions.length) { root.innerHTML = ""; return; }
+    const parts = [];
+    actions.forEach((a, i) => {
+      parts.push(`<span class="step">${escapeHtml(actionLabel(a.kind))}</span>`);
+      if (i < actions.length - 1) parts.push('<span class="step-arrow">→</span>');
+    });
+    root.innerHTML = parts.join(" ");
+  },
+
+  async saveRule() {
+    const text = (document.getElementById("ruleNlInput").value || "").trim();
+    if (!text) return;
+    document.getElementById("ruleSaveBtn").disabled = true;
+    try {
+      await this._post("/structured-rules", { natural_language: text, enabled: true });
+      document.getElementById("ruleExplanation").innerHTML =
+        '<span class="text-emerald-700">✓ Kural etkinleştirildi. Aktif kurallar listesinde görebilirsin.</span>';
+      this.refreshRules();
+    } catch (e) {
+      document.getElementById("ruleExplanation").innerHTML =
+        `<span class="text-rose-700">Kural kaydedilemedi: ${escapeHtml(e.message)}</span>`;
+      document.getElementById("ruleSaveBtn").disabled = false;
+    }
+  },
+
+  async testRule() {
+    const text = (document.getElementById("ruleNlInput").value || "").trim();
+    if (!text) return;
+    const out = document.getElementById("ruleTestResult");
+    out.classList.remove("hidden");
+    document.getElementById("ruleTestTraces").innerHTML =
+      '<div class="muted text-[12px]">test çalışıyor…</div>';
+    try {
+      const rule = this.state.parsedRule;
+      const triggerEvent = (rule && rule.trigger && rule.trigger.event_type) || "store.created";
+      const r = await this._post("/structured-rules/test", {
+        natural_language: text,
+        event_type: triggerEvent,
+        event_payload: { name: "Test Mağaza", handle: "test_store" },
+      });
+      const status = document.getElementById("ruleTestStatus");
+      status.textContent = "durum: " + (r.status || "—");
+      status.className = "chip " + (r.status === "completed" ? "chip-good" : (r.status === "failed" ? "chip-bad" : "chip-warn"));
+      const traces = r.trace || [];
+      document.getElementById("ruleTestTraces").innerHTML = traces.map(t => `
+        <div class="text-[11.5px] flex items-start gap-2">
+          <span class="chip chip-neutral">${escapeHtml(nodeLabel(t.node))}</span>
+          <span class="flex-1">${escapeHtml(t.summary || '')}</span>
+          ${t.duration_ms != null ? `<span class="muted">${t.duration_ms}ms</span>` : ''}
+        </div>
+      `).join("");
+    } catch (e) {
+      document.getElementById("ruleTestTraces").innerHTML =
+        `<div class="text-rose-700 text-[12px]">test başarısız: ${escapeHtml(e.message)}</div>`;
+    }
+  },
+
+  clearRuleEditor() {
+    document.getElementById("ruleNlInput").value = "";
+    document.getElementById("ruleParseSummary").classList.add("hidden");
+    document.getElementById("ruleTestResult").classList.add("hidden");
+    document.getElementById("ruleSaveBtn").disabled = true;
+    document.getElementById("ruleTestBtn").disabled = true;
+    this.state.parsedRule = null;
+  },
+
+  // ----- Templates -----------------------------------------------------
+  async refreshTemplates() {
+    if (!this._canRefresh()) return;
+    try {
+      const r = await this._get("/rule-templates");
+      this._setIfChanged("templates", r.data || [], (d) => this._renderTemplates(d, r.categories));
+    } catch (e) {}
+  },
+  _renderTemplates(items, categories) {
+    const root = document.getElementById("templatesGrid");
+    document.getElementById("templatesCount").textContent = `${items.length} şablon`;
+    root.innerHTML = items.map(t => `
+      <div class="panel-soft p-3 cursor-pointer hover:border-indigo-200 hover:bg-white transition" onclick="App.openTemplate('${escapeQuote(t.id)}')">
+        <div class="flex items-start gap-2">
+          <div class="text-[20px] leading-none">${escapeHtml(t.icon)}</div>
+          <div class="flex-1 min-w-0">
+            <div class="text-[12.5px] font-semibold leading-snug">${escapeHtml(t.name)}</div>
+            <div class="text-[10.5px] muted mt-0.5 line-clamp-2">${escapeHtml(t.description)}</div>
+            <div class="mt-1.5">
+              <span class="chip chip-neutral">${escapeHtml((categories && categories[t.category]) || t.category)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `).join("");
+  },
+  async openTemplate(template_id) {
+    // Tur 3: prompt yerine modal form
+    try {
+      const all = await this._get("/rule-templates");
+      const t = (all.data || []).find(x => x.id === template_id);
+      if (!t) return;
+      this._showTemplateModal(t);
+    } catch (e) { alert("Şablon hatası: " + e.message); }
+  },
+
+  _showTemplateModal(t) {
+    let modal = document.getElementById("tmplModal");
+    if (modal) modal.remove();
+    modal = document.createElement("div");
+    modal.id = "tmplModal";
+    modal.className = "fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-start justify-center p-6 overflow-auto";
+    const fields = t.parameters.map(p => {
+      const def = p.default != null ? p.default : "";
+      if (p.kind === "number") {
+        return `<div class="space-y-1">
+          <label class="text-[12px] font-medium block">${escapeHtml(p.label)}${p.required ? ' *' : ''}</label>
+          <input type="number" data-param="${escapeHtml(p.key)}" value="${escapeHtml(String(def))}"
+                 class="nl-input" style="min-height:auto;padding:.5rem .8rem" />
+          ${p.hint ? `<div class="text-[11px] muted">${escapeHtml(p.hint)}</div>` : ''}
+        </div>`;
+      }
+      return `<div class="space-y-1">
+        <label class="text-[12px] font-medium block">${escapeHtml(p.label)}${p.required ? ' *' : ''}</label>
+        <input type="text" data-param="${escapeHtml(p.key)}" value="${escapeHtml(String(def))}"
+               class="nl-input" style="min-height:auto;padding:.5rem .8rem" />
+        ${p.hint ? `<div class="text-[11px] muted">${escapeHtml(p.hint)}</div>` : ''}
+      </div>`;
+    }).join("");
+    modal.innerHTML = `
+      <div class="panel max-w-lg w-full p-6 mt-12">
+        <div class="flex items-start justify-between mb-3">
+          <div>
+            <div class="text-[16px] font-semibold">${escapeHtml(t.icon)} ${escapeHtml(t.name)}</div>
+            <p class="text-[12px] muted mt-0.5">${escapeHtml(t.description)}</p>
+          </div>
+          <button onclick="App._closeTemplateModal()" class="ghost-btn">İptal</button>
+        </div>
+        <div class="space-y-3 mt-4">${fields || '<div class="text-[12px] muted">Bu şablon parametre istemiyor — hemen önizleyebilirsin.</div>'}</div>
+        <div class="flex gap-2 mt-5">
+          <button onclick="App._materializeTemplate('${escapeQuote(t.id)}')" class="accent-btn">Önizle</button>
+          <button onclick="App._closeTemplateModal()" class="ghost-btn">Vazgeç</button>
+        </div>
+      </div>
+    `;
+    modal.addEventListener("click", (e) => { if (e.target === modal) this._closeTemplateModal(); });
+    document.body.appendChild(modal);
+  },
+  _closeTemplateModal() {
+    const m = document.getElementById("tmplModal");
+    if (m) m.remove();
+  },
+  async _materializeTemplate(template_id) {
+    const modal = document.getElementById("tmplModal");
+    const params = {};
+    if (modal) {
+      modal.querySelectorAll("[data-param]").forEach(el => {
+        const key = el.getAttribute("data-param");
+        const val = el.value;
+        params[key] = el.type === "number" ? Number(val) : val;
+      });
+    }
+    try {
+      const r = await this._post(`/rule-templates/${template_id}/materialize`, { parameters: params });
+      document.getElementById("ruleNlInput").value = r.template.natural_language;
+      this._closeTemplateModal();
+      await this.parseRule();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e) { alert("Şablon hatası: " + e.message); }
+  },
+
+  // ----- Conflicts -----------------------------------------------------
+  async refreshConflicts() {
+    if (!this._canRefresh()) return;
+    try {
+      // Tur 3: zengin suggestions endpoint'i
+      const r = await this._get("/structured-rules-conflicts/suggestions");
+      this._setIfChanged("conflicts", r.data || [], (d) => this._renderConflicts(d));
+    } catch (e) {}
+  },
+  _renderConflicts(items) {
+    const banner = document.getElementById("conflictsBanner");
+    const list = document.getElementById("conflictsList");
+    if (!items.length) { banner.classList.add("hidden"); return; }
+    banner.classList.remove("hidden");
+    list.innerHTML = items.map(c => {
+      const resBtns = (c.resolutions || []).map(r => {
+        const cls = r.action === "deactivate_older" ? "accent-btn"
+                  : r.action === "deactivate_lower_health" ? "ghost-btn"
+                  : "ghost-btn";
+        const label = r.action === "deactivate_older" ? "En yenisi kalsın"
+                    : r.action === "deactivate_lower_health" ? "En sağlıklısı kalsın"
+                    : "Manuel inceleyeceğim";
+        return `<button onclick="App.applyConflictResolution('${escapeQuote(c.conflict_key)}', '${escapeQuote(r.action)}')" class="${cls}" style="padding:.3rem .7rem;font-size:.72rem">${escapeHtml(label)}</button>`;
+      }).join(" ");
+      return `
+        <div class="panel-soft p-3 fade-in" style="background:#fffbeb">
+          <div class="text-[12.5px] mb-2">${escapeHtml(c.summary)}</div>
+          <div class="text-[10.5px] muted mb-2">Kurallar: ${(c.rule_names || []).map(n => '"'+escapeHtml(n)+'"').join(", ")}</div>
+          <div class="flex gap-1.5 flex-wrap">${resBtns}</div>
+        </div>
+      `;
+    }).join("");
+  },
+  async applyConflictResolution(conflictKey, action) {
+    if (action === "keep_one_review") {
+      alert("Tamam — elle inceleyeceksin. Bir şey yapılmadı.");
+      return;
+    }
+    if (!confirm("Bu çözümü uygulamak istediğine emin misin?")) return;
+    try {
+      await this._post("/structured-rules-conflicts/resolve", {
+        conflict_key: conflictKey, action,
+      });
+      this.refreshConflicts();
+      this.refreshRules();
+      this.refreshLearning();
+    } catch (e) { alert("Çözüm hatası: " + e.message); }
+  },
+
+  // ----- Learning suggestions ------------------------------------------
+  async refreshLearning() {
+    if (!this._canRefresh()) return;
+    try {
+      const r = await this._get("/learning-suggestions");
+      this._setIfChanged("learning", { data: r.data || [], overview: r.overview }, (d) => this._renderLearning(d));
+    } catch (e) {}
+  },
+  _renderLearning({ data, overview }) {
+    const panel = document.getElementById("learningPanel");
+    const list = document.getElementById("learningList");
+    const ov = document.getElementById("learningOverview");
+
+    if (overview) {
+      ov.innerHTML = `Ortalama sağlık: <b>%${Math.round((overview.avg_health_score || 0)*100)}</b> · ${overview.healthy} sağlıklı / ${overview.neutral} nötr / ${overview.unhealthy} riskli`;
+    } else {
+      ov.innerHTML = "";
+    }
+
+    if (!data.length) { panel.classList.add("hidden"); return; }
+    panel.classList.remove("hidden");
+
+    list.innerHTML = data.map(s => {
+      const sevCls = ({ high: "chip-bad", medium: "chip-warn", low: "chip-good" }[s.severity] || "chip-neutral");
+      const kindLbl = ({ review: "gözden geçir", promote: "güvenilir", consolidate: "birleştir" }[s.kind] || s.kind);
+      return `
+        <div class="panel-soft p-3 fade-in">
+          <div class="flex items-center gap-1.5 mb-1">
+            <span class="chip ${sevCls}">${escapeHtml(kindLbl)}</span>
+            <span class="text-[10.5px] muted">kural #${s.rule_id} · sağlık %${Math.round((s.health_score||0)*100)}</span>
+            <span class="text-[10.5px] muted ml-auto">${s.stats.success_count}✓ / ${s.stats.cancel_count}↺ / ${s.stats.failure_count}✗</span>
+          </div>
+          <div class="text-[12.5px] font-medium">${escapeHtml(s.rule_name)}</div>
+          <div class="text-[11.5px] mt-0.5">${escapeHtml(s.summary)}</div>
+        </div>
+      `;
+    }).join("");
+  },
+
+  // ----- Rules ---------------------------------------------------------
+  async refreshRules() {
+    if (!this._canRefresh()) return;
+    try {
+      const r = await this._get("/structured-rules");
+      this._setIfChanged("rules", r.data || [], (d) => this._renderRules(d));
+    } catch (e) {}
+  },
+  _renderRules(rules) {
+    const root = document.getElementById("rulesList");
+    document.getElementById("rulesCount").textContent = `${rules.length} kural`;
+    if (!rules.length) {
+      root.innerHTML = '<div class="text-[12px] muted py-4">Henüz tanımlı bir kural yok. İlk kuralını yukarıdan oluştur.</div>';
+      return;
+    }
+    root.innerHTML = rules.map(r => {
+      const trig = (r.trigger && r.trigger.event_type) || "—";
+      const conf = Math.round((r.parse_confidence || 0) * 100);
+      const actions = ((r.actions || []).map(a => actionLabel(a.kind))).join(" → ");
+      const enabledClass = r.enabled ? "chip-good" : "chip-neutral";
+      const enabledLabel = r.enabled ? "açık" : "kapalı";
+      return `
+        <div class="panel-soft p-3">
+          <div class="flex items-center gap-1.5 mb-1">
+            <span class="chip ${enabledClass}">${enabledLabel}</span>
+            <span class="chip chip-neutral">${escapeHtml(humanizeEventType(trig))}</span>
+            <span class="text-[10.5px] muted ml-auto">güven %${conf}</span>
+          </div>
+          <div class="text-[13px] font-medium leading-snug">${escapeHtml(r.name || '—')}</div>
+          <div class="text-[11px] muted mt-0.5">${escapeHtml(r.natural_language || '')}</div>
+          <div class="text-[11px] mt-1.5 text-indigo-700">${escapeHtml(actions)}</div>
+          <div class="flex gap-1.5 mt-2">
+            <button onclick="App.toggleRule(${r.id}, ${!r.enabled})" class="ghost-btn">${r.enabled ? "Devre dışı bırak" : "Etkinleştir"}</button>
+            <button onclick="App.deleteRule(${r.id})" class="danger-btn">Sil</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+  },
+  async toggleRule(id, enabled) {
+    try { await this._patch(`/structured-rules/${id}/enabled?enabled=${enabled}`, {}); this.refreshRules(); }
+    catch (e) { console.error(e); }
+  },
+  async deleteRule(id) {
+    if (!confirm("Bu kuralı silmek istediğinden emin misin?")) return;
+    try { await this._delete(`/structured-rules/${id}`); this.refreshRules(); }
+    catch (e) { console.error(e); }
+  },
+
+  // executions
+  async refreshExecutions() {
+    if (!this._canRefresh()) return;
+    try {
+      const r = await this._get("/rule-executions?limit=15");
+      this._setIfChanged("executions", r.data || [], (d) => this._renderExecutions(d));
+      const waitingList = (r.data || []).filter(e => e.status === "waiting_human");
+      this._setIfChanged("waitingExecutions", waitingList, (d) => this._renderWaitingExecutions(d));
+    } catch (e) {}
+  },
+  _renderExecutions(rows) {
+    const root = document.getElementById("executionsList");
+    document.getElementById("executionsCount").textContent = `${rows.length} yürütme`;
+    if (!rows.length) {
+      root.innerHTML = '<div class="text-[12px] muted py-4">Henüz yürütme yok.</div>';
+      return;
+    }
+    root.innerHTML = rows.map(e => {
+      const statusCls = ({
+        completed: "chip-good", running: "chip-ai",
+        waiting_human: "chip-warn", waiting_timer: "chip-warn",
+        failed: "chip-bad", cancelled: "chip-bad",
+      }[e.status] || "chip-neutral");
+      const statusLbl = humanizeExecStatus(e.status);
+      return `
+        <div class="panel-soft p-3 fade-in cursor-pointer hover:bg-white" onclick="App.openExecutionDetail(${e.id})">
+          <div class="flex items-center gap-1.5 mb-1">
+            <span class="chip ${statusCls}">${statusLbl}</span>
+            <span class="text-[10.5px] muted">kural #${e.rule_id}</span>
+            <span class="text-[10.5px] muted ml-auto">${formatTs(e.started_at)}</span>
+          </div>
+          <div class="text-[12px]">${escapeHtml(humanizeEventType(e.event_type))}</div>
+          <div class="text-[10.5px] muted mt-0.5">son düğüm: <code>${escapeHtml(nodeLabel(e.current_node))}</code></div>
+          ${e.error ? `<div class="text-[10.5px] text-rose-700 mt-0.5">hata: ${escapeHtml(e.error.slice(0,160))}</div>` : ''}
+        </div>
+      `;
+    }).join("");
+  },
+
+  async openExecutionDetail(executionId) {
+    // Modal'ı oluştur (yoksa)
+    let modal = document.getElementById("execModal");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "execModal";
+      modal.className = "fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-start justify-center p-6 overflow-auto";
+      modal.innerHTML = `
+        <div class="panel max-w-3xl w-full p-6 mt-12">
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <div class="section-title">Yürütme Detayı</div>
+              <p class="text-[12px] muted" id="execModalSub">—</p>
+            </div>
+            <button onclick="App.closeExecutionDetail()" class="ghost-btn">Kapat</button>
+          </div>
+          <div id="execStepper" class="rule-stepper mb-4"></div>
+          <div id="execTraces" class="space-y-1.5 max-h-[480px] overflow-auto"></div>
+        </div>
+      `;
+      modal.addEventListener("click", (e) => { if (e.target === modal) this.closeExecutionDetail(); });
+      document.body.appendChild(modal);
+    } else {
+      modal.classList.remove("hidden");
+    }
+    this._loadExecutionDetail(executionId);
+    if (this._execPollTimer) clearInterval(this._execPollTimer);
+    this._execPollTimer = setInterval(() => this._loadExecutionDetail(executionId), 5000);
+  },
+  closeExecutionDetail() {
+    const m = document.getElementById("execModal");
+    if (m) m.classList.add("hidden");
+    if (this._execPollTimer) { clearInterval(this._execPollTimer); this._execPollTimer = null; }
+  },
+  async _loadExecutionDetail(executionId) {
+    try {
+      const r = await this._get(`/rule-executions/${executionId}`);
+      const ex = r.data, traces = r.traces || [];
+      const sub = document.getElementById("execModalSub");
+      const statusLbl = humanizeExecStatus(ex.status);
+      sub.innerHTML = `Yürütme #${ex.id} · kural #${ex.rule_id} · ` +
+        `${escapeHtml(humanizeEventType(ex.event_type))} · ` +
+        `<b>${statusLbl}</b>`;
+
+      // Build stepper from traces (unique nodes in order)
+      const nodes = [];
+      for (const t of traces) {
+        if (!nodes.some(n => n.name === t.node_name)) {
+          nodes.push({ name: t.node_name, status: t.node_status });
+        } else {
+          // update status to latest
+          const found = nodes.find(n => n.name === t.node_name);
+          if (found && t.node_status !== "started") found.status = t.node_status;
+        }
+      }
+      const stepClass = (s) => s === "interrupted" ? "current" : (s === "failed" ? "cancelled" : "done");
+      const stepperHtml = nodes.map((n, i) => {
+        const cls = stepClass(n.status);
+        return `<span class="step ${cls}">${escapeHtml(nodeLabel(n.name))}</span>` +
+               (i < nodes.length - 1 ? '<span class="step-arrow">→</span>' : '');
+      }).join("");
+      document.getElementById("execStepper").innerHTML = stepperHtml;
+
+      // Trace list — Tur 3: duration bar chart eklendi
+      const maxDur = Math.max(1, ...traces.map(t => t.duration_ms || 0));
+      document.getElementById("execTraces").innerHTML = traces.map(t => {
+        const widthPct = t.duration_ms != null
+          ? Math.max(2, Math.round((t.duration_ms / maxDur) * 100))
+          : 0;
+        const barCls = t.node_status === "failed" ? "bg-rose-300"
+                     : t.node_status === "interrupted" ? "bg-amber-300"
+                     : "bg-emerald-300";
+        return `
+          <div class="panel-soft p-2.5">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="chip ${t.node_status === 'failed' ? 'chip-bad' : (t.node_status === 'interrupted' ? 'chip-warn' : 'chip-good')}">${escapeHtml(nodeLabel(t.node_name))}</span>
+              <span class="text-[10.5px] muted">${escapeHtml(t.node_status)}</span>
+              <span class="text-[10.5px] muted ml-auto">${formatTs(t.started_at)}${t.duration_ms != null ? ' · ' + t.duration_ms + 'ms' : ''}</span>
+            </div>
+            <div class="text-[12px]">${escapeHtml(t.summary || '')}</div>
+            ${t.duration_ms != null ? `
+              <div class="h-1.5 mt-2 bg-slate-100 rounded-full overflow-hidden">
+                <div class="h-full ${barCls}" style="width:${widthPct}%"></div>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join("");
+    } catch (e) {
+      document.getElementById("execTraces").innerHTML =
+        '<div class="text-rose-700 text-[12px]">Yürütme okunamadı: ' + escapeHtml(e.message) + '</div>';
+    }
+  },
+  _renderWaitingExecutions(rows) {
+    const root = document.getElementById("waitingExecutionsList");
+    if (!rows.length) {
+      root.innerHTML = '<div class="text-[12px] muted">Bekleyen kural yürütmesi yok.</div>';
+      return;
+    }
+    root.innerHTML = rows.map(e => `
+      <div class="panel-soft p-3 fade-in">
+        <div class="flex items-center gap-1.5 mb-1">
+          <span class="chip chip-warn">insan kararı bekleniyor</span>
+          <span class="text-[10.5px] muted">yürütme #${e.id}</span>
+          <span class="text-[10.5px] muted ml-auto">${formatTs(e.started_at)}</span>
+        </div>
+        <div class="text-[12px]">${escapeHtml(humanizeEventType(e.event_type))} — Kural #${e.rule_id}</div>
+        <div class="text-[10.5px] muted mt-0.5">${escapeHtml(e.trace_summary || '').slice(0,160)}</div>
+        <div class="flex gap-1.5 mt-2">
+          <button onclick="App.resumeExecution(${e.id}, 'approved')" class="ghost-btn" style="background:#f0fdf4;color:#047857">Onayla</button>
+          <button onclick="App.resumeExecution(${e.id}, 'rejected')" class="danger-btn">Reddet</button>
+        </div>
+      </div>
+    `).join("");
+  },
+  async resumeExecution(id, decision) {
+    let feedback = null;
+    if (decision === "rejected") {
+      feedback = prompt("Reddetme sebebi (opsiyonel):") || "";
+    }
+    try {
+      await this._post(`/rule-executions/${id}/resume`, { decision, feedback });
+      this.refreshExecutions();
+      this.refreshApprovals();
+      this.refreshApprovalBadge();
+    } catch (e) { console.error(e); }
+  },
+
+  // ============================================================
+  //  OPS tab — workflows, campaigns, customers, schedules
+  // ============================================================
+
+  async refreshWorkflows() {
+    if (!this._canRefresh()) return;
+    try {
+      const r = await this._get("/workflows?limit=12");
+      this._setIfChanged("workflows", r.data || [], (d) => this._renderWorkflows(d));
+    } catch (e) {}
+  },
+  _renderWorkflows(rows) {
+    const root = document.getElementById("workflowsList");
+    if (!rows.length) { root.innerHTML = '<div class="text-[12px] muted">Aktif iş akışı yok.</div>'; return; }
+    const statusCls = {
+      scheduled: "chip-warn", running: "chip-ai", completed: "chip-good", cancelled: "chip-bad",
+    };
+    const statusLbl = {
+      scheduled: "planlandı", running: "çalışıyor", completed: "tamamlandı", cancelled: "iptal",
+    };
+    root.innerHTML = rows.slice(0, 8).map(w => `
+      <div class="flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg hover:bg-slate-50">
+        <span class="text-[12.5px] truncate" title="${escapeHtml(w.workflow_name || '')}">${escapeHtml(humanizeWorkflow(w.workflow_name))}</span>
+        <span class="chip ${statusCls[w.status] || 'chip-neutral'}">${statusLbl[w.status] || w.status}</span>
+      </div>
+    `).join("");
+  },
+
+  async refreshCampaigns() {
+    if (!this._canRefresh()) return;
+    try {
+      const r = await this._get("/campaigns?limit=8");
+      this._setIfChanged("campaigns", r.data || [], (d) => this._renderCampaigns(d));
+    } catch (e) {}
+  },
+  _renderCampaigns(rows) {
+    const root = document.getElementById("campaignsList");
+    if (!rows.length) { root.innerHTML = '<div class="text-[12px] muted">Aktif kampanya yok.</div>'; return; }
+    const statusCls = ({
+      draft: "chip-neutral", scheduled: "chip-warn", live: "chip-good",
+      paused: "chip-warn", completed: "chip-ai", archived: "chip-neutral",
+    });
+    const statusLbl = ({
+      draft: "taslak", scheduled: "planlı", live: "yayında",
+      paused: "duraklatıldı", completed: "tamamlandı", archived: "arşivlendi",
+    });
+    root.innerHTML = rows.map(c => `
+      <div class="panel-soft p-3">
+        <div class="flex items-center gap-1.5 mb-1">
+          <span class="chip ${statusCls[c.status]}">${statusLbl[c.status]}</span>
+          <span class="text-[10.5px] muted">${humanizeChannel(c.channel)}</span>
+        </div>
+        <div class="text-[12.5px] font-medium">${escapeHtml(c.name)}</div>
+        <div class="text-[10.5px] muted mt-0.5">${formatTs(c.created_at)}</div>
+      </div>
+    `).join("");
+  },
+
+  async refreshCustomerThreads() {
+    if (!this._canRefresh()) return;
+    try {
+      const r = await this._get("/customer-threads");
+      const threads = (r.threads || []);
+      this._setIfChanged("threads", threads, (d) => this._renderCustomerThreads(d));
+    } catch (e) {}
+  },
+  _renderCustomerThreads(threads) {
+    const root = document.getElementById("customerThreadsList");
+    if (!threads.length) { root.innerHTML = '<div class="text-[12px] muted">Müşteri konuşması yok.</div>'; return; }
+    const statusCls = ({
+      open: "chip-good", awaiting_human: "chip-warn", escalated: "chip-bad", resolved: "chip-neutral",
+    });
+    const statusLbl = ({
+      open: "açık", awaiting_human: "yanıt bekliyor", escalated: "eskalasyonda", resolved: "kapandı",
+    });
+    root.innerHTML = threads.slice(0,8).map(t => `
+      <div class="panel-soft p-3">
+        <div class="flex items-center gap-1.5 mb-1">
+          <span class="chip ${statusCls[t.status] || 'chip-neutral'}">${statusLbl[t.status] || t.status}</span>
+          <span class="text-[10.5px] muted">${humanizeChannel(t.channel)} · ${escapeHtml(t.customer_name || t.customer_ref)}</span>
+          <span class="text-[10.5px] muted ml-auto">${formatTs(t.last_message_at)}</span>
+        </div>
+        <div class="text-[12px] muted">${escapeHtml(t.topic || '—')}</div>
+      </div>
+    `).join("");
+  },
+
+  async refreshSchedules() {
+    if (!this._canRefresh()) return;
+    try {
+      const r = await this._get("/schedules?status=pending&limit=10");
+      this._setIfChanged("schedules", r.data || [], (d) => this._renderSchedules(d));
+    } catch (e) {}
+  },
+  _renderSchedules(rows) {
+    const root = document.getElementById("schedulesList");
+    if (!rows.length) { root.innerHTML = '<div class="text-[12px] muted">Planlı iş yok.</div>'; return; }
+    root.innerHTML = rows.map(s => `
+      <div class="panel-soft p-3">
+        <div class="flex items-center gap-1.5 mb-1">
+          <span class="chip chip-warn">planlandı</span>
+          <span class="text-[10.5px] muted">${humanizeChannel(s.channel)}</span>
+        </div>
+        <div class="text-[12.5px]">${escapeHtml(s.title || '—')}</div>
+        <div class="text-[10.5px] muted mt-0.5">${formatTs(s.scheduled_at)}</div>
+      </div>
+    `).join("");
+  },
+
+  // ============================================================
+  //  APPROVALS tab
+  // ============================================================
+
+  async refreshApprovals() {
+    if (!this._canRefresh()) return;
+    try {
+      const r = await this._get("/approvals");
+      this._setIfChanged("approvals", r.data || [], (d) => this._renderApprovals(d));
+    } catch (e) {}
+  },
+  _renderApprovals(rows) {
+    const root = document.getElementById("approvalsList");
+    document.getElementById("approvalsHeaderCount").textContent = `${rows.length} onay bekliyor`;
+    if (!rows.length) {
+      root.innerHTML = '<div class="text-[12px] muted py-6 text-center">Onay kuyruğu temiz.</div>';
+      return;
+    }
+    root.innerHTML = rows.map(a => `
+      <div class="panel-soft p-4">
+        <div class="flex items-center gap-1.5 mb-1">
+          <span class="chip chip-${a.risk_level === 'high' ? 'bad' : (a.risk_level === 'medium' ? 'warn' : 'neutral')}">${riskLabel(a.risk_level)}</span>
+          <span class="text-[10.5px] muted">güven %${Math.round((a.confidence||0)*100)}</span>
+          <span class="text-[10.5px] muted ml-auto">${formatTs(a.created_at)}</span>
+        </div>
+        <div class="text-[13px] font-medium">${escapeHtml(humanizeWorkflow(a.workflow_name))}</div>
+        <div class="text-[11px] muted mt-0.5">${escapeHtml(a.reason || '')}</div>
+        <div class="flex gap-1.5 mt-2">
+          <button onclick="App.approveItem(${a.id})" class="ghost-btn" style="background:#f0fdf4;color:#047857">Onayla</button>
+          <button onclick="App.rejectItem(${a.id})" class="danger-btn">Reddet</button>
+        </div>
+      </div>
+    `).join("");
+  },
+  async approveItem(id) {
+    try { await this._post(`/approvals/${id}/approve`, {}); this.refreshApprovals(); this.refreshApprovalBadge(); }
+    catch (e) { console.error(e); }
+  },
+  async rejectItem(id) {
+    const fb = prompt("Reddetme sebebi (opsiyonel):") || "";
+    try { await this._post(`/approvals/${id}/reject`, { feedback: fb }); this.refreshApprovals(); this.refreshApprovalBadge(); }
+    catch (e) { console.error(e); }
+  },
+
+  // ============================================================
+  //  CHAT (operatör tab)
+  // ============================================================
+
+  _installEnter() {
+    const inp = document.getElementById("chatInput");
+    if (inp) {
+      inp.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); this.sendChat(); }
+      });
+    }
+  },
+  _renderQuickAsk() {
+    const suggestions = [
+      "Hangi ürün en çok stokta?",
+      "Hangi ürün en çok satıyor?",
+      "Satışlar neden düşüyor?",
+      "Müşteri yorumları nasıl?",
+      "Bekleyen onay var mı?",
+      "Kargo durumu nasıl?",
+      "AI ne öğrendi?",
+    ];
+    const root = document.getElementById("quickAsk");
+    root.innerHTML = suggestions.map(s =>
+      `<button onclick="App.askPreset('${escapeQuote(s)}')" class="chip hover:border-indigo-300">${escapeHtml(s)}</button>`
+    ).join("");
+    const full = document.getElementById("quickAskFull");
+    if (full) {
+      full.innerHTML = suggestions.map(s =>
+        `<button onclick="App.askPreset('${escapeQuote(s)}')" class="w-full text-left text-[12.5px] py-2 px-3 rounded-lg hover:bg-slate-50 border border-slate-100">${escapeHtml(s)}</button>`
+      ).join("");
+    }
+  },
+  _greet() {
+    const sid = this._loadSessionId();
+    this._addChat({
+      role: "ai",
+      text: "Selam — operasyonun nabzını seninle birlikte tutuyorum.\nStok, satış, kampanya, müşteri, kargo, akış… soru sor; gerçek veriden cevap vereyim.",
+      meta: sid ? "AI Operatör hazır · önceki konuşma sürüyor." : "AI Operatör hazır.",
+    });
+    this._renderSessionPill();
+  },
+  askPreset(q) {
+    this.switchTab("operator");
+    document.getElementById("chatInput").value = q;
+    setTimeout(() => this.sendChat(), 50);
+  },
+  _loadSessionId() {
+    try { return localStorage.getItem("aiOpsSessionId") || null; } catch (e) { return null; }
+  },
+  _saveSessionId(sid) {
+    try { if (sid) localStorage.setItem("aiOpsSessionId", sid); } catch (e) {}
+  },
+  _clearSessionId() {
+    try { localStorage.removeItem("aiOpsSessionId"); } catch (e) {}
+  },
+  _renderSessionPill() {
+    const sid = this._loadSessionId();
+    const pill = document.getElementById("sessionPill");
+    if (!pill) return;
+    if (!sid) { pill.innerHTML = '<span>henüz konuşma yok</span>'; return; }
+    const meta = this.state.sessionMeta || {};
+    const ent = meta.activeEntity ? `· konu: <b>${escapeHtml(meta.activeEntity)}</b>` : "";
+    const turns = meta.turnCount ? `${meta.turnCount} tur` : "yeni konuşma";
+    pill.innerHTML = `oturum <code>${escapeHtml(sid.slice(-6))}</code> · ${turns} ${ent}`;
+  },
+  async resetSession() {
+    try {
+      const r = await this._post("/chat/new-session?user_id=1", {});
+      this.state.sessionMeta = { turnCount: 0, activeEntity: null };
+      this._saveSessionId((r.data && r.data.id) || null);
+      document.getElementById("chatLog").innerHTML = "";
+      this._greet();
+    } catch (e) { console.error(e); }
+  },
+  async sendChat() {
+    const inp = document.getElementById("chatInput");
+    const send = document.getElementById("chatSend");
+    const q = (inp.value || "").trim();
+    if (!q) return;
+    this._addChat({ role: "user", text: q });
+    inp.value = "";
+    send.disabled = true;
+    const stageWrap = this._addStagePlaceholder();
+    try {
+      const sid = this._loadSessionId();
+      const r = await this._post("/chat", { question: q, user_id: 1, session_id: sid });
+      this._saveSessionId(r.session_id);
+      this.state.sessionMeta = {
+        activeEntity: r.active_entity || null,
+        turnCount: (this.state.sessionMeta?.turnCount || 0) + 1,
+      };
+      this._renderSessionPill();
+      await this._animateStages(stageWrap, r.stages || []);
+      this._addChat({
+        role: "ai", text: r.answer,
+        meta: this._chatMeta(r),
+        data: r.data, recommendations: r.recommendations,
+      });
+      this._setModeChip(r.mode);
+    } catch (e) {
+      stageWrap.remove();
+      this._addChat({ role: "ai", text: "Üzgünüm, şu an cevap üretemedim. (" + e.message + ")", meta: "hata" });
+    } finally {
+      send.disabled = false; inp.focus();
+    }
+  },
+  _setModeChip(mode) {
+    const chip = document.getElementById("chatModeChip");
+    if (mode === "llm") {
+      chip.className = "chip chip-ai"; chip.innerHTML = '<span class="dot bg-indigo-500"></span>llm";';
+      chip.title = "Yanıt LLM ile üretildi";
+    } else if (mode === "deterministic_fallback") {
+      chip.className = "chip chip-warn"; chip.innerHTML = '<span class="dot bg-amber-500"></span>yedek';
+      chip.title = "LLM kullanılamadı, deterministik özet";
+    }
+  },
+  _addStagePlaceholder() {
+    const log = document.getElementById("chatLog");
+    const wrap = document.createElement("div");
+    wrap.className = "flex flex-col gap-1.5 self-start fade-in";
+    wrap.style.maxWidth = "92%";
+    const first = document.createElement("div");
+    first.className = "stage-line";
+    first.innerHTML = '<span class="dots"><span></span><span></span><span></span></span><span>düşünüyorum…</span>';
+    wrap.appendChild(first);
+    requestAnimationFrame(() => first.classList.add("shown"));
+    log.appendChild(wrap);
+    log.scrollTop = log.scrollHeight;
+    return wrap;
+  },
+  async _animateStages(stageWrap, stages) {
+    const log = document.getElementById("chatLog");
+    stageWrap.innerHTML = "";
+    if (!stages || !stages.length) { stageWrap.remove(); return; }
+    const per = Math.max(140, Math.min(280, 600 / stages.length));
+    for (let i = 0; i < stages.length; i++) {
+      const line = document.createElement("div");
+      line.className = "stage-line";
+      line.innerHTML = '<span class="dots"><span></span><span></span><span></span></span>' +
+                       `<span>${renderMarkdownish(stages[i])}</span>`;
+      stageWrap.appendChild(line);
+      stageWrap.querySelectorAll(".stage-line:not(:last-child)").forEach(el => el.classList.add("done"));
+      log.scrollTop = log.scrollHeight;
+      requestAnimationFrame(() => line.classList.add("shown"));
+      await new Promise(r => setTimeout(r, per));
+    }
+    stageWrap.querySelectorAll(".stage-line").forEach(el => el.classList.add("done"));
+  },
+  _chatMeta(r) {
+    const parts = [];
+    if (r.is_followup) {
+      parts.push('<span class="chip chip-ai" title="' + escapeHtml(r.follow_up_rationale || "") + '">↩ bağlam aktif</span>');
+    }
+    const intent = humanizeIntent(r.routed_intent || r.intent || "");
+    if (intent && intent !== "—") parts.push(escapeHtml(intent));
+    if (r.confidence != null) parts.push(`güven %${Math.round((r.confidence||0)*100)}`);
+    if (r.latency_ms != null) parts.push(`<span class="muted">${r.latency_ms}ms</span>`);
+    return parts.join(" · ");
+  },
+  _addChat({ role, text, meta, data, recommendations }) {
+    const log = document.getElementById("chatLog");
+    const wrap = document.createElement("div");
+    wrap.className = "flex flex-col fade-in";
+    wrap.style.alignSelf = role === "user" ? "flex-end" : "flex-start";
+    wrap.style.maxWidth = "92%";
+    const bubble = document.createElement("div");
+    bubble.className = `chat-bubble ${role === "user" ? "chat-user" : "chat-ai"}`;
+    bubble.innerHTML = renderMarkdownish(text);
+    wrap.appendChild(bubble);
+    if (recommendations && recommendations.length) {
+      const recs = document.createElement("div");
+      recs.className = "flex flex-wrap gap-1 mt-1.5";
+      recs.innerHTML = recommendations.map(r =>
+        `<span class="chip chip-ai" title="${escapeHtml(r.intent)}">→ ${escapeHtml(r.suggestion)}</span>`
+      ).join("");
+      wrap.appendChild(recs);
+    }
+    if (data && Object.keys(data || {}).length && role === "ai") {
+      const det = document.createElement("details");
+      det.className = "mt-1 text-[11px]";
+      const sum = document.createElement("summary");
+      sum.className = "muted hover:text-slate-700 cursor-pointer select-none";
+      sum.textContent = "kaynak veriyi göster";
+      det.appendChild(sum);
+      const pre = document.createElement("pre");
+      pre.className = "mt-1 p-2 panel-soft text-[10.5px] overflow-auto max-h-40 scroll";
+      pre.textContent = JSON.stringify(data, null, 2);
+      det.appendChild(pre);
+      wrap.appendChild(det);
+    }
+    if (meta) {
+      const m = document.createElement("div");
+      m.className = "chat-meta";
+      m.innerHTML = meta;
+      wrap.appendChild(m);
+    }
+    log.appendChild(wrap);
+    log.scrollTop = log.scrollHeight;
+    return wrap;
+  },
+
+  // ----- seed -----------------------------------------------------------
+  async runSeed() {
+    try {
+      await this._post("/seed-data?stores=3", {});
+      this.refreshActiveTab(true);
+    } catch (e) { console.error(e); }
+  },
+};
+
+// =============================================================
+// Helpers
+// =============================================================
+function escapeHtml(s) {
+  if (s === undefined || s === null) return "";
+  return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+function escapeQuote(s) { return String(s).replace(/'/g, "\\'"); }
+function renderMarkdownish(s) {
+  if (s === undefined || s === null) return "";
+  let out = escapeHtml(s);
+  out = out.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  out = out.replace(/`([^`]+)`/g, '<code class="px-1 rounded bg-white/60 text-[12px]">$1</code>');
+  out = out.replace(/\n/g, "<br/>");
+  return out;
+}
+function formatTs(ts) {
+  if (!ts) return "";
+  try {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return ts.toString().slice(0, 16);
+    const today = new Date();
+    if (d.toDateString() === today.toDateString()) {
+      return d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+    }
+    return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" }) + " " +
+           d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+  } catch (e) { return ts.toString().slice(0, 16); }
+}
+function humanizeStockHealth(h) {
+  return ({ healthy: "sağlıklı", warning: "uyarı", critical: "kritik" }[h] || "—");
+}
+function stockTrendLabel(h) {
+  return ({ healthy: "iyi", warning: "izle", critical: "kritik" }[h] || "—");
+}
+function humanizeTraceTag(tag) {
+  return ({
+    AI_REASONING:            "AI değerlendirme",
+    AUTONOMOUS_PLAN:         "otonom plan",
+    BUSINESS_SIGNAL:         "iş sinyali",
+    CROSS_EVENT_REASONING:   "çapraz analiz",
+    TOOL_SELECTION:          "araç seçimi",
+    APPROVAL_REQUIRED:       "onay isteği",
+    ROUTING:                 "olay yönlendirme",
+    WORKFLOW_LATENCY:        "iş akışı süresi",
+    WORKFLOW_TRACE:          "iş akışı izi",
+    MEMORY_SUMMARY:          "hafıza özeti",
+    SCHEDULE_CREATED:        "yeni planlama",
+    SCHEDULE_FIRED:          "planlanan iş tetiklendi",
+    CAMPAIGN_CREATED:        "kampanya oluşturuldu",
+    CAMPAIGN_LAUNCHED:       "kampanya yayında",
+    CAMPAIGN_COMPLETED:      "kampanya tamamlandı",
+    CUSTOMER_THREAD_OPENED:  "müşteri konuşması başladı",
+    CUSTOMER_DRAFT_CREATED:  "müşteri yanıt taslağı",
+    CUSTOMER_THREAD_ESCALATED: "müşteri eskalasyonu",
+    CUSTOMER_THREAD_RESOLVED:  "müşteri konuşması kapandı",
+    RULE_EXECUTION_START:    "kural tetiklendi",
+    RULE_EXECUTION_END:      "kural tamamlandı",
+    CONTENT_GENERATED:       "içerik üretildi",
+    RISK_ASSESSED:           "risk değerlendirildi",
+    APPROVAL_REQUESTED:      "onay isteniyor",
+    APPROVAL_RESOLVED:       "onay sonuçlandı",
+    PUBLISH_DONE:            "yayın yapıldı",
+    MONITOR_SCHEDULED:       "izleme planlandı",
+    ORG_CREATED:             "organizasyon kuruldu",
+    API_KEY_ISSUED:          "API anahtarı verildi",
+    CREDENTIAL_REVOKED:      "kimlik bilgisi iptal",
+  }[tag] || tag);
+}
+function humanizeWorkflow(name) {
+  if (!name) return "AI iş akışı";
+  const map = {
+    discount_promotion:        "İndirim kampanyası",
+    growth_marketing:          "Büyüme kampanyası",
+    marketing_campaign:        "Kampanya akışı",
+    reputation:                "İtibar koruma akışı",
+    shipping_response:         "Kargo bilgilendirme akışı",
+    customer_support:          "Müşteri destek akışı",
+    inventory_review:          "Stok analizi",
+    low_stock_alert:           "Düşük stok uyarısı",
+    welcome_instagram_post:    "Yeni mağaza karşılaması",
+    scheduled_instagram_post:  "Planlı Instagram paylaşımı",
+    scheduled_banner_post:     "Planlı banner",
+    scheduled_coupon_post:     "Planlı kupon",
+    scheduled_campaign_:       "Planlı kampanya",
+    customer_reply_:           "Müşteri yanıt akışı",
+    customer_escalation_:      "Müşteri eskalasyonu",
+    rule_resume_:              "Kural devamı",
+    monitor_rule_exec_:        "Yayın performans izleme",
+  };
+  for (const k of Object.keys(map)) if (name.startsWith(k)) return map[k];
+  if (name.includes("instagram")) return "Instagram paylaşımı";
+  if (name.includes("banner")) return "Banner kampanyası";
+  return "AI iş akışı";
+}
+function humanizeIntent(intent) {
+  return ({
+    top_stock_product:      "En yüksek stok sorgusu",
+    top_selling_product:    "En çok satan ürün",
+    top_n_selling:          "Top ürün listesi",
+    sales_drop_diagnosis:   "Satış düşüş analizi",
+    sales_overview:         "Satış özeti",
+    sentiment_status:       "Müşteri duyarlılığı",
+    workflows_summary:      "İş akışı özeti",
+    approval_bottlenecks:   "Onay kuyruğu",
+    campaigns_performance:  "Kampanya performansı",
+    shipping_health:        "Kargo sağlığı",
+    memory_patterns:        "AI hafıza örüntüleri",
+    operational_pressure:   "Operasyonel baskı",
+    low_stock_products:     "Düşük stoklu ürünler",
+    open_ended:             "Genel değerlendirme",
+    discount_promotion:     "indirim aksiyonu",
+    growth_marketing:       "büyüme aksiyonu",
+  }[intent] || intent || "—");
+}
+function humanizeEventType(et) {
+  return ({
+    "store.created":       "Yeni mağaza oluştuğunda",
+    "store.updated":       "Mağaza güncellendiğinde",
+    "store.deleted":       "Mağaza silindiğinde",
+    "product.created":     "Yeni ürün eklendiğinde",
+    "product.updated":     "Ürün güncellendiğinde",
+    "order.created":       "Yeni sipariş geldiğinde",
+    "order.shipped":       "Kargoya verildiğinde",
+    "order.cancelled":     "Sipariş iptal edildiğinde",
+    "shipping.delayed":    "Kargo gecikmesinde",
+    "stock.updated":       "Stok değiştiğinde",
+    "review.created":      "Yeni yorum geldiğinde",
+    "review.negative":     "Olumsuz yorum geldiğinde",
+    "customer.question":   "Müşteri sorusunda",
+    "campaign.created":    "Yeni kampanyada",
+    "banner.updated":      "Banner güncellendiğinde",
+    "sales.updated":       "Satış güncellendiğinde",
+  }[et] || et || "—");
+}
+function humanizeChannel(ch) {
+  return ({
+    instagram: "Instagram", facebook: "Facebook", banner: "Banner",
+    coupon: "Kupon", faq: "SSS", support: "Destek", email: "E-posta",
+    sms: "SMS", trendyol: "Trendyol", shopify: "Shopify",
+  }[ch] || ch || "—");
+}
+function actionLabel(kind) {
+  return ({
+    wait:             "Bekle",
+    generate_content: "İçerik üret",
+    risk_check:       "Risk kontrolü",
+    approval:         "Onay",
+    publish:          "Yayınla",
+    monitor:          "İzle",
+    notify_customer:  "Müşteriye bildir",
+    create_coupon:    "Kupon üret",
+    schedule_followup: "Takip planla",
+  }[kind] || kind);
+}
+function nodeLabel(node) {
+  return ({
+    supervisor:        "Başlangıç",
+    wait:              "Bekleme",
+    content_generator: "İçerik",
+    risk_analyzer:     "Risk",
+    approval_gate:     "Onay",
+    publisher:         "Yayın",
+    monitor:           "İzleme",
+    notify_customer:   "Bildirim",
+    create_coupon:     "Kupon",
+    finalize:          "Bitiş",
+    error:             "Hata",
+  }[node] || node || "—");
+}
+function humanizeExecStatus(s) {
+  return ({
+    running:        "çalışıyor",
+    waiting_human:  "insan kararı bekliyor",
+    waiting_timer:  "zamanı bekliyor",
+    completed:      "tamamlandı",
+    failed:         "başarısız",
+    cancelled:      "iptal",
+  }[s] || s);
+}
+function riskLabel(r) {
+  return ({ high: "yüksek risk", medium: "orta risk", low: "düşük risk" }[r] || "—");
+}
+
+document.addEventListener("DOMContentLoaded", () => App.init());
+</script>
+
+</body>
+</html>

@@ -1,0 +1,37 @@
+[project]
+name = "agent-base-api"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "celery>=5.6.3",
+    "redis>=5.0.0",
+    # Tur 4: CrewAI tamamen kaldırıldı (Tur 2'de removal başlamıştı,
+    # Tur 4 monorepo birleşiminde son CrewAI çağrıları da native
+    # OpenAI/Gemini'a geçirildi).
+    "fal-client>=0.13.2",
+    "fastapi>=0.136.1",
+    "boto3>=1.35.0",
+    "cryptography>=42.0.0",
+    "google-genai>=1.73.0",
+    "google-generativeai>=0.8.6",
+    "httpx>=0.28.1",
+    "langgraph>=1.2.1",
+    "langgraph-checkpoint-sqlite>=3.1.0",
+    "loguru>=0.7.3",
+    "openai>=1.40.0",
+    "pillow>=12.2.0",
+    "pyaml>=26.2.1",
+    "pydantic>=2.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.34.2",
+    "uvicorn>=0.47.0",
+    "imageio-ffmpeg>=0.6.0",
+    "sqlalchemy>=2.0.49",
+    "pymysql>=1.1.3",
+    "python-jose[cryptography]>=3.5.0",
+    "bcrypt>=4.2.0",
+    "pydantic-settings>=2.10.1",
+    "python-multipart>=0.0.30",
+]
