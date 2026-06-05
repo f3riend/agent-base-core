@@ -511,8 +511,9 @@ def _build_image_prompt(
         or "ürün"
     )
     return (
-        f"Professional social media visual for {name}, theme {template_name}, "
-        f"{channel} format, modern design, vibrant colors, premium look"
+        f"Profesyonel sosyal medya görseli: {name}, tema {template_name}, "
+        f"{channel} formatı, modern tasarım, canlı renkler, premium görünüm. "
+        f"GÖRSELDEKİ TÜM YAZI VE METİNLER TÜRKÇE OLMALI. İngilizce metin kullanma."
     )
 
 
@@ -775,10 +776,6 @@ def content_generator_node(state: RuleExecutionState) -> dict:
         or []
     )
 
-    # Story tespiti: graph'ta publish_story node'u veya params.content_type='story'
-    # varsa, content channel'i de "story" olarak işaretle. Bu sayede
-    # _fetch_template_from_mysql outputSize='story' filtresini uygulayabilir
-    # ve MySQL kart payload'ı doğru collection'a yazılabilir.
     is_story = (
         params.get("content_type") == "story"
         or channel == "story"
@@ -787,8 +784,6 @@ def content_generator_node(state: RuleExecutionState) -> dict:
     if is_story:
         channel = "story"
 
-    # 1) MySQL şablon — story için outputSize='story' önceliklendirilir
-    # module=campaign → campaign_templates'a bak; aksi halde content_templates.
     rule_module = (
         (rule_meta.get("module") if isinstance(rule_meta, dict) else None)
         or params.get("module")
@@ -803,7 +798,6 @@ def content_generator_node(state: RuleExecutionState) -> dict:
     ai_caption = _ai_generate_caption(event_payload, rule_meta, template_data, channel)
 
     if ai_caption:
-        # AI başarılı — caption'dan headline + body parse et
         caption = ai_caption
         first_sentence = caption.split(".")[0].strip() or caption[:80]
         headline = first_sentence[:80]
@@ -811,7 +805,6 @@ def content_generator_node(state: RuleExecutionState) -> dict:
         hashtags = _extract_hashtags(caption)
         source = "ai"
     else:
-        # Fallback — statik tablo + entity name
         h_static, b_static = _TEMPLATE_HEADLINES.get(template, _TEMPLATE_HEADLINES["generic"])
         entity_name = (
             (event.get("item") or {}).get("name")
@@ -821,7 +814,6 @@ def content_generator_node(state: RuleExecutionState) -> dict:
         )
         if entity_name:
             b_static = f"{b_static} — {entity_name}"
-        # Statik hashtag tablosu
         hashtags = {
             "anneler_gunu":   ["AnnelerGünü", "AnneSevgisi"],
             "babalar_gunu":   ["BabalarGünü"],
@@ -840,7 +832,7 @@ def content_generator_node(state: RuleExecutionState) -> dict:
 
     # 3) Image prompt + image_url
     image_prompt = _build_image_prompt(event_payload, template_data, channel, template)
-    # Şablon prompt'u varsa değişkenleri doldur + ürün bilgilerini sonuna ekle
+
     if template_data and template_data.get("prompt"):
         _name = (
             event_payload.get("name")
@@ -861,7 +853,6 @@ def content_generator_node(state: RuleExecutionState) -> dict:
         _today = datetime.now().strftime("%Y-%m-%d")
         _end = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
 
-        # Şablon prompt'undaki {{DEGISKEN}} değerlerini doldur
         _top_text = _name[:40] if _name else "Yeni Ürün"
         _main_title = _name[:60] if _name else "Yeni Ürün"
         _subtitle = f"%{int(_discount)} İndirim" if _discount else _description
@@ -875,7 +866,6 @@ def content_generator_node(state: RuleExecutionState) -> dict:
         image_prompt = image_prompt.replace("{{SUBTITLE}}", _subtitle)
         image_prompt = image_prompt.replace("{{BUTTON_TEXT}}", _button_text)
 
-        # CAMPAIGN_DATA sonuna ekle
         _campaign_suffix = (
             f'\n\nCAMPAIGN_DATA:\n{{'
             f'\n  "pricing": {{'
@@ -890,7 +880,17 @@ def content_generator_node(state: RuleExecutionState) -> dict:
             f'\n}}'
         )
         image_prompt = image_prompt + _campaign_suffix
-    # Şablonun referans görseli — pipeline'a reference olarak verilecek.
+
+    # Olumlu kullanıcı yorumlarını prompt'a ekle
+    _reviews = event_payload.get("reviews_positive") or []
+    if _reviews:
+        _review_text = " | ".join(str(r)[:80] for r in _reviews[:3])
+        image_prompt = image_prompt + f"\n\nMÜŞTERİ GÖRÜŞLERİ (referans için): {_review_text}"
+
+    # Türkçe metin zorunluluğu
+    image_prompt = image_prompt + "\n\nÖNEMLİ: Görseldeki tüm yazılar, başlıklar, butonlar ve metinler TÜRKÇE olmalı. İngilizce metin kesinlikle kullanma."
+
+    # Şablonun referans görseli
     template_image_url: str | None = None
     template_image_urls: list[str] = []
     if template_data:
@@ -908,13 +908,10 @@ def content_generator_node(state: RuleExecutionState) -> dict:
                     u = (entry.get("url") or "").strip()
                     if u:
                         template_image_urls.append(u)
-        # Singular bulunmadıysa, plural ilk eleman düşülsün
         if not template_image_url and template_image_urls:
             template_image_url = template_image_urls[0]
 
-    # 4) Görsel üretimi — mevcut pipeline ile (FAL/OpenAI). Şablon görseli
-    # + ürün görseli + mağaza logosu reference olarak verilir; pipeline yeni
-    # varlık üretir. Pipeline yoksa veya hata olursa şablon görseli fallback.
+    # 4) Görsel üretimi
     output_size = None
     if template_data:
         output_size = (
@@ -922,14 +919,10 @@ def content_generator_node(state: RuleExecutionState) -> dict:
             .strip()
             or None
         )
-    # params'tan gelen output_size template_data'yı override eder
     params_output_size = (params.get("output_size") or "").strip()
     if params_output_size:
         output_size = params_output_size
 
-    # Şablon ve params boyut vermediyse kanaldan deterministik türet —
-    # pipeline default'a (feed) düşmesin. story=1088x1920, post=1088x1360,
-    # banner=1600x704
     if not output_size:
         if channel in ("story", "instagram_story"):
             output_size = "story"
@@ -938,12 +931,9 @@ def content_generator_node(state: RuleExecutionState) -> dict:
         elif channel in ("banner", "campaign_banner"):
             output_size = "campaign_banner"
 
-    # Banner kanalı için her zaman campaign_banner boyutu
     if channel == "banner":
         output_size = "campaign_banner"
 
-    # Event'ten ürün/mağaza görsellerini topla (resource_service.build_rule_context
-    # bunları item/store context'ine yerleştirmişti — burada flat + nested okuyalım)
     product_image_url: str | None = (
         event_payload.get("primary_image_url")
         or event_payload.get("image_url")
@@ -977,7 +967,6 @@ def content_generator_node(state: RuleExecutionState) -> dict:
         if not store_logo_url and isinstance(nested_item, dict):
             store_logo_url = nested_item.get("store_logo_url")
 
-    # YENİ — store banner_url: hosgeldin gibi şablonlar için birincil görsel
     store_banner_url: str | None = (
         event_payload.get("banner_url")
         or event_payload.get("store_banner_url")
@@ -987,11 +976,9 @@ def content_generator_node(state: RuleExecutionState) -> dict:
         if isinstance(nested_store, dict):
             store_banner_url = nested_store.get("banner_url")
 
-    # Ürün görseli yoksa store banner'ı birincil referans olarak kullan
     if not product_image_url and not product_image_urls_list and store_banner_url:
         product_image_url = store_banner_url
 
-    # OpenAI key — Celery worker'da env'de olmadığı için state/DB'den de bak
     resolved_openai_key = _resolve_openai_key_for_state(state)
 
     generated_image_url = _generate_image_via_pipeline(
