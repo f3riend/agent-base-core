@@ -378,6 +378,14 @@ _FOLLOWUP_HINTS = (
     "detay",
     "devam",
     "tekrar",
+    "peki ya",     # peki ya diğeri?
+    "ya diğeri",
+    "ya öteki",
+    "diğeri",
+    "öteki",
+    "az önce",     # az önce ne dedin?
+    "daha detay",
+    "daha fazla",
 )
 
 
@@ -435,6 +443,28 @@ def resolve_follow_up(question: str, session_id: str) -> FollowUpResolution:
         return FollowUpResolution(False, question, None, None, "no_active_context")
 
     q = (question or "").strip().rstrip("?")
+
+    # "peki ya diğeri" / "ya öteki" → diğer ürün/varlık hakkında sor
+    if any(k in q.lower() for k in ("diğeri", "öteki", "peki ya", "ya diğeri")):
+        if active_label:
+            rewritten = f"{active_label} dışındaki diğer ürün hakkında bilgi ver"
+        else:
+            rewritten = "Diğer ürün hakkında bilgi ver"
+        return FollowUpResolution(
+            True, rewritten, None, active_intent,
+            "other_entity_lookup",
+        )
+
+    # "az önce ne dedin" / "tekrar söyle" → önceki cevabı özetle
+    if any(k in q.lower() for k in ("az önce", "tekrar söyle", "ne dedin")):
+        if active_label:
+            rewritten = f"{active_label} hakkında az önce söylediklerini özetle"
+        else:
+            rewritten = "Az önce söylediklerini özetle"
+        return FollowUpResolution(
+            True, rewritten, active_label, active_intent,
+            "recap_last_turn",
+        )
 
     # "neden" / "peki neden" → "why" lookup for the active subject
     if q in ("neden", "peki", "peki neden") or q.startswith(("peki neden", "neden ")):
