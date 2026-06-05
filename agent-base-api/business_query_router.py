@@ -1,282 +1,168 @@
 """
-Business query router — natural language → retrieval intent.
+Business query router — saf veri çekici.
 
-The user-facing chat needs to answer real questions, not return generic
-state summaries. This module classifies the question into one of the
-retrieval intents handled by business_retrieval_service and dispatches.
+Karar verme YOK: keyword listesi, Türkçe stem matching, intent detection,
+ürün skorlaması, "soru hangi türden?" branch'i — hiçbiri yok. Tek görev:
 
-If the question is broad/open-ended (no clear intent), `route()` returns
-None and the caller (business_chat) falls back to narrative_synth.
+    PG'den o kullanıcının TÜM mağaza + ürün + yorum + SSS verisini al,
+    ham yapıda tek bir payload olarak ai_synthesizer'a teslim et.
 
-Detection is keyword-based with a tiered scoring system — precise enough
-for a Turkish/English mix without an LLM, and predictable enough for tests.
+Hangi parçanın soruyla ilgili olduğunu LLM seçer; biz seçmeyiz. Kullanıcı
+"magza", "urun", "magzalarımdaki ürün listesini ver" — ne yazarsa yazsın
+Python tarafında dallanma yok, her zaman aynı tam snapshot gider.
+
+Kısa süreli hafıza (son N tur) business_chat → memory.conversation_context
+üzerinden synthesizer'a ayrı kanaldan gider; bu modül onunla ilgilenmez.
 """
 
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass, field
-from typing import Callable, Optional
-
-import business_retrieval_service as retriever
+from typing import Optional
 
 
-@dataclass
-class Intent:
-    name: str
-    handler: Callable
-    # Tokens that must appear (any of). Token = a substring match (case-insensitive).
-    any_of: tuple[str, ...] = ()
-    # If supplied, ALL groups must match — one token from each group.
-    all_groups: tuple[tuple[str, ...], ...] = ()
-    # Tokens that disqualify (negation / wrong topic).
-    not_any_of: tuple[str, ...] = ()
-    weight: float = 1.0
+# SQLAlchemy mapper'ların eksiksiz initialization'ı için tüm bağımlı modelleri
+# bir kez registry'ye yükle (string-based relationship eval zamanı gerekli).
+try:
+    from app.models.store import Store
+    from app.models.product import Product
+    from app.models.product_image import ProductImage  # noqa: F401
+    from app.models.product_review import ProductReview  # noqa: F401
+    from app.models.product_faq import ProductFaq  # noqa: F401
+    from app.models.product_metrics_weekly import ProductMetricsWeekly  # noqa: F401
+except Exception as _model_bootstrap_exc:
+    print(f"[ROUTER] model bootstrap import failed: {_model_bootstrap_exc}")
 
 
-# Order matters: more specific intents declared first. The router walks the
-# list, picks the highest-scoring match. Tied scores resolve to declaration
-# order.
-
-INTENTS_REGISTRY: list[Intent] = [
-    # ---- stock-specific ----
-    # Turkish allomorphs: "stok" → "stoğ" before vowel suffix (stoğu, stoğa,
-    # stoğum, stoğunda). Substring prefix matcher will then catch all of
-    # them via "stoğ" as well as "stok".
-    Intent(
-        name="top_stock_product",
-        handler=lambda **kw: retriever.top_stock_product(**kw),
-        all_groups=(
-            ("stok", "stoğ", "stock", "depo", "envanter"),
-            ("en çok", "en yüksek", "en fazla", "en bol", "en büyük",
-             "highest", "most", "en"),
-        ),
-        not_any_of=("düşük", "kritik", "az kalan", "low",),
-        weight=2.0,
-    ),
-    Intent(
-        name="low_stock_products",
-        handler=lambda **kw: retriever.low_stock_products(**kw),
-        all_groups=(
-            ("stok", "stoğ", "stock", "depo", "envanter"),
-            ("düşük", "az", "kritik", "kalan", "azal", "tüken", "low"),
-        ),
-        weight=2.0,
-    ),
-
-    # ---- sales-specific ----
-    # Turkish allomorphs: "satış"/"satıl"/"satıyor"/"satılan"/"satılıyor" all
-    # share the stem "satı" — using "satı" prefix catches every form.
-    Intent(
-        name="top_selling_product",
-        handler=lambda **kw: retriever.top_selling_product(**kw),
-        all_groups=(
-            ("satı", "satış", "sales", "selling"),
-            ("en çok", "en yüksek", "en fazla", "en iyi", "top", "best", "most", "en"),
-        ),
-        not_any_of=("düşük", "düşüş", "azalış", "drop", "azaldı"),
-        weight=2.0,
-    ),
-    Intent(
-        name="top_n_selling",
-        handler=lambda **kw: retriever.top_n_selling(**kw),
-        any_of=(
-            "en çok satan ürünler", "trend ürünler", "en iyi ürünler",
-            "en çok satılan", "best sellers", "top selling products",
-            "viral ürünler", "popüler ürünler",
-        ),
-        weight=2.0,
-    ),
-    Intent(
-        name="sales_drop_diagnosis",
-        handler=lambda **kw: retriever.sales_drop_diagnosis(**kw),
-        all_groups=(
-            ("satı", "satış", "sales", "gelir", "revenue", "ciro", "hasılat"),
-            ("neden", "niye", "düş", "düşüş", "azalış", "azaldı", "kötü",
-             "yavaşladı", "geriledi", "drop", "decline", "fall"),
-        ),
-        weight=2.5,
-    ),
-    Intent(
-        name="sales_overview",
-        handler=lambda **kw: retriever.sales_overview(**kw),
-        any_of=(
-            "satış durumu", "satış nasıl", "satış özet", "satış raporu",
-            "satışlar nasıl", "ciro nasıl", "sales overview", "sales status",
-        ),
-        weight=1.5,
-    ),
-
-    # ---- sentiment / reviews ----
-    # "yorum" → "yorumlar/yorumda/yorumla/yorumum" — "yorum" prefix covers all.
-    Intent(
-        name="sentiment_status",
-        handler=lambda **kw: retriever.sentiment_status(**kw),
-        any_of=(
-            "yorum", "review", "memnun", "memnuniyet", "müşteri ne diyor",
-            "şikayet", "olumsuz", "olumlu", "duyarlılık", "duygu",
-            "sentiment",
-        ),
-        weight=1.5,
-    ),
-
-    # ---- workflows / approvals ----
-    # "onay" → "onaylar/onayda/onayım/onaylanan" — "onay" prefix covers.
-    Intent(
-        name="approval_bottlenecks",
-        handler=lambda **kw: retriever.approval_bottlenecks(**kw),
-        any_of=(
-            "onay", "bekleyen", "approval", "pending approval",
-            "onay kuyru", "onayda", "onaylanacak",
-        ),
-        weight=1.8,
-    ),
-    Intent(
-        name="workflows_summary",
-        handler=lambda **kw: retriever.workflows_summary(**kw),
-        any_of=(
-            "iş akışı", "iş akışları", "workflow", "workflows", "akış",
-            "ne yapıyor", "ne çalışıyor", "otomasyon", "otomasyonlar",
-            "running",
-        ),
-        weight=1.5,
-    ),
-
-    # ---- campaigns / shipping ----
-    # "kampanya" → "kampanyalar/kampanyada/kampanyanın" — "kampanya" prefix.
-    Intent(
-        name="campaigns_performance",
-        handler=lambda **kw: retriever.campaigns_performance(**kw),
-        all_groups=(
-            ("kampanya", "campaign", "promosyon"),
-            ("performans", "başarı", "sonuç", "ölç", "performance", "result"),
-        ),
-        weight=2.0,
-    ),
-    # "kargo" → "kargonun/kargoyla/kargoda" — "kargo" prefix covers all.
-    Intent(
-        name="shipping_health",
-        handler=lambda **kw: retriever.shipping_health(**kw),
-        any_of=(
-            "kargo", "shipping", "teslimat", "delivery", "geç gelen",
-            "kargo durumu", "shipping status", "gönderi",
-        ),
-        weight=1.6,
-    ),
-
-    # ---- memory / learning ----
-    Intent(
-        name="memory_patterns",
-        handler=lambda **kw: retriever.memory_patterns(**kw),
-        any_of=(
-            "öğren", "hatırla", "geçmiş", "memory", "ne öğrendin",
-            "pattern", "örüntü", "deneyim", "hafıza",
-        ),
-        weight=1.5,
-    ),
-
-    # ---- operational pressure ----
-    Intent(
-        name="operational_pressure",
-        handler=lambda **kw: retriever.operational_pressure(**kw),
-        any_of=(
-            "operasyonel", "operasyon", "genel durum", "şirket durumu",
-            "şu an ne durumda", "ne durumdayız", "operations",
-            "iş nasıl gidiyor", "işletme nasıl", "company status",
-            "baskı", "yoğunluk",
-        ),
-        weight=1.5,
-    ),
-]
+# Soru hakkında karar değil — sadece LLM context-window'unu güvende tutmak
+# için ürün başına ham yorum/SSS üst sınırı. Soruya göre değişmez; her zaman
+# en yeni N kayıt iletilir.
+_REVIEWS_PER_PRODUCT_CAP = 25
+_FAQS_PER_PRODUCT_CAP = 15
 
 
-_QUESTION_NORMALIZE_RE = re.compile(r"[^\w\sçğıöşüÇĞİÖŞÜ]+", flags=re.UNICODE)
+def _pg_full_snapshot(user_id: int) -> dict:
+    """Kullanıcıya ait tüm mağaza + ürün + yorum + SSS'yi tek payload'da döner.
 
-
-def _normalize(text: str) -> str:
-    text = (text or "").lower()
-    text = _QUESTION_NORMALIZE_RE.sub(" ", text)
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def _contains(text: str, token: str) -> bool:
-    """Substring match for Turkish-style agglutinative morphology.
-
-    Turkish suffixes attach directly to roots: "stokta" = "stok" + "da" (loc.),
-    "yorumları" = "yorum" + "ları" (acc/pl.). A strict word boundary would
-    miss these. We match the token as a prefix of any word in the text — that
-    correctly handles "stok" in "stokta" while still rejecting unrelated
-    substrings (e.g. "stop" would not match "stok" because there's no word
-    starting with "stop" that has "stok" as its prefix).
+    Karar yok, filtreleme yok: ne PG'de varsa o gelir. Yorum/SSS sayısı
+    sabit bir üst sınırla kesilir (sadece bağlam boyutu güvenliği — soruya
+    bağlı bir tercih değil).
     """
-    token = token.lower()
-    if " " in token:
-        return token in text
-    return re.search(rf"(^|\s){re.escape(token)}", text) is not None
-
-
-def _score(intent: Intent, normalized: str) -> float:
-    score = 0.0
-
-    for tok in intent.not_any_of:
-        if _contains(normalized, tok):
-            return 0.0
-
-    if intent.any_of:
-        hits = sum(1 for tok in intent.any_of if _contains(normalized, tok))
-        if hits == 0 and not intent.all_groups:
-            return 0.0
-        score += hits * 0.6
-
-    if intent.all_groups:
-        for group in intent.all_groups:
-            if not any(_contains(normalized, tok) for tok in group):
-                return 0.0
-            score += 0.7
-    return score * intent.weight
-
-
-def detect_intent(question: str) -> Optional[Intent]:
-    normalized = _normalize(question)
-    if not normalized:
-        return None
-    best: tuple[float, Intent] | None = None
-    for intent in INTENTS_REGISTRY:
-        s = _score(intent, normalized)
-        if s <= 0:
-            continue
-        if best is None or s > best[0]:
-            best = (s, intent)
-    if best is None or best[0] < 0.8:
-        return None
-    return best[1]
-
-
-def route(question: str, *, user_id: int = 1, **extra) -> Optional[dict]:
-    """Return a retriever response, or None for open-ended questions."""
-    intent = detect_intent(question)
-    if intent is None:
-        return None
     try:
-        result = intent.handler(user_id=user_id, **extra)
-        if isinstance(result, dict):
-            result.setdefault("routed_intent", intent.name)
-            return result
-        return None
-    except TypeError:
-        try:
-            result = intent.handler(user_id=user_id)
-            if isinstance(result, dict):
-                result.setdefault("routed_intent", intent.name)
-                return result
-        except Exception as exc:
-            print(f"[QUERY_ROUTER] handler error for {intent.name}: {exc}")
-        return None
+        from app.core.database import SessionLocal
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
+
+        with SessionLocal() as session:
+            store_rows = list(session.scalars(
+                select(Store)
+                .where(Store.user_id == int(user_id))
+                .order_by(Store.id.desc())
+            ).all())
+
+            stores = [{
+                "id":         str(s.id),
+                "name":       s.name,
+                "rating":     float(s.rating) if s.rating is not None else None,
+                "logo_url":   getattr(s, "logo_url", None),
+                "banner_url": getattr(s, "banner_url", None),
+                "status":     getattr(s, "status", None),
+            } for s in store_rows]
+
+            product_rows = list(session.scalars(
+                select(Product)
+                .join(Store, Product.store_id == Store.id)
+                .where(Store.user_id == int(user_id))
+                .order_by(Product.created_at.desc())
+                .options(
+                    selectinload(Product.reviews),
+                    selectinload(Product.faqs),
+                    selectinload(Product.images),
+                )
+            ).all())
+
+            products: list[dict] = []
+            for p in product_rows:
+                reviews_sorted = sorted(
+                    list(p.reviews or []),
+                    key=lambda r: (r.review_date or "", getattr(r, "id", 0)),
+                    reverse=True,
+                )[:_REVIEWS_PER_PRODUCT_CAP]
+                faqs_capped = list(p.faqs or [])[:_FAQS_PER_PRODUCT_CAP]
+
+                products.append({
+                    "id":           str(p.id),
+                    "store_id":     str(p.store_id) if p.store_id is not None else None,
+                    "name":         p.name,
+                    "brand":        p.brand,
+                    "category":     p.category,
+                    "price":        float(p.price)    if p.price    is not None else None,
+                    "discount":     float(p.discount) if p.discount is not None else None,
+                    "stock":        p.stock,
+                    "rating":       float(p.rating)   if p.rating   is not None else None,
+                    "rating_count": p.rating_count,
+                    "status":       p.status,
+                    "weekly_sales": p.weekly_sales,
+                    "description":  p.description,
+                    "thumb_url":    (p.images[0].url if p.images else None),
+                    "reviews": [{
+                        "rating":      int(r.rating) if r.rating is not None else None,
+                        "content":     r.content,
+                        "review_date": r.review_date,
+                    } for r in reviews_sorted],
+                    "faqs": [{
+                        "question": f.question,
+                        "answer":   f.answer,
+                    } for f in faqs_capped],
+                })
+
+            return {
+                "type":          "full_context",
+                "stores":        stores,
+                "store_count":   len(stores),
+                "products":      products,
+                "product_count": len(products),
+            }
     except Exception as exc:
-        print(f"[QUERY_ROUTER] handler error for {intent.name}: {exc}")
+        print(f"[ROUTER] _pg_full_snapshot error: {exc}")
+        return {
+            "type":          "full_context",
+            "stores":        [],
+            "store_count":   0,
+            "products":      [],
+            "product_count": 0,
+        }
+
+
+def route(
+    question: str,
+    *,
+    user_id: int = 1,
+    active_entity_label: str = "",
+    **extra,
+) -> Optional[dict]:
+    """Soruya bakmadan tüm PG snapshot'ı çek; ai_synthesizer'a teslim et.
+
+    `active_entity_label` ve diğer extra'lar artık kullanılmıyor — imza
+    business_chat ile uyumlu kalsın diye duruyor. Karar LLM'e bırakıldı.
+    """
+    question = (question or "").strip()
+    if not question:
         return None
+
+    pg_ctx = _pg_full_snapshot(user_id)
+
+    return {
+        "intent":        "smart_query",
+        "routed_intent": "smart_query",
+        "answer":        "",
+        "data": {
+            "pg_context": pg_ctx,
+            "op_context": {},
+        },
+        "recommendations": [],
+        "confidence":      0.9,
+    }
 
 
 def list_supported_intents() -> list[str]:
-    """For diagnostics — what the router can answer."""
-    return [i.name for i in INTENTS_REGISTRY]
+    return ["smart_query"]

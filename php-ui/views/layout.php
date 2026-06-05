@@ -88,6 +88,10 @@ if ($isSettings) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?></title>
   <meta name="color-scheme" content="light dark">
+  <?php $faviconHref = htmlspecialchars(app_url('/assets/img/logo.jpg'), ENT_QUOTES, 'UTF-8'); ?>
+  <link rel="icon" type="image/jpeg" href="<?= $faviconHref ?>">
+  <link rel="shortcut icon" type="image/jpeg" href="<?= $faviconHref ?>">
+  <link rel="apple-touch-icon" href="<?= $faviconHref ?>">
   <?php if ($isAuthed): ?>
   <script>
     (function () {

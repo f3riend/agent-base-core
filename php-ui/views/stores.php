@@ -1,8 +1,12 @@
 <?php
 declare(strict_types=1);
 /** Mağazalar — Mağaza halkaları + ürün grid + sağ panel + modaller.
- * Backend: fake_commerce_app GET /commerce-platform/stores ve /stores/{id}/items
- * Mutate:  POST /commerce-platform/internal/create-store ve /create-product
+ * Backend (Faz 3): /social-media/stores ve /social-media/products
+ *   GET    /social-media/stores                       — mağaza listesi
+ *   POST   /social-media/stores                       — yeni mağaza
+ *   GET    /social-media/products?store_id=<uuid>     — mağaza ürünleri
+ *   GET    /social-media/products/{id}                — ürün detayı (nested children)
+ *   POST   /social-media/products                     — yeni ürün (images/reviews/faqs dahil)
  */
 $apiBase = htmlspecialchars(app_browser_api_base(), ENT_QUOTES, 'UTF-8');
 $cu = function_exists('app_current_user') ? app_current_user() : null;
@@ -85,31 +89,89 @@ $userIdAttr = htmlspecialchars($userId, ENT_QUOTES, 'UTF-8');
   </form>
 </div>
 
-<!-- Modal: Ürün Ekle -->
+<!-- Modal: Ürün Ekle (Faz 3: brand/description/rating + dinamik images/reviews/faqs) -->
 <div data-modal="create-product" hidden
      style="position:fixed; inset:0; z-index:900; background:rgba(15,23,42,0.4); display:flex; align-items:center; justify-content:center; padding:1rem;">
   <form data-modal-form="create-product"
-        style="background:#fff; border-radius:0.75rem; padding:1.25rem; width:100%; max-width:480px; display:flex; flex-direction:column; gap:0.6rem;">
+        style="background:#fff; border-radius:0.75rem; padding:1.25rem; width:100%; max-width:640px; max-height:90vh; overflow:auto; display:flex; flex-direction:column; gap:0.6rem;">
     <h2 style="margin:0; font-size:1.1rem;">Ürün Ekle — <span data-modal-title-store></span></h2>
     <input type="hidden" name="store_id">
+
     <label style="display:flex; flex-direction:column; gap:0.2rem; font-size:0.85rem;">Ürün Adı <span style="color:#dc2626;">*</span>
       <input type="text" name="name" required style="padding:0.45rem 0.6rem; border:1px solid #e5e7eb; border-radius:0.4rem;">
     </label>
-    <label style="display:flex; flex-direction:column; gap:0.2rem; font-size:0.85rem;">Fiyat (TL) <span style="color:#dc2626;">*</span>
-      <input type="number" name="price" step="0.01" min="0" required style="padding:0.45rem 0.6rem; border:1px solid #e5e7eb; border-radius:0.4rem;">
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.6rem;">
+      <label style="display:flex; flex-direction:column; gap:0.2rem; font-size:0.85rem;">Marka
+        <input type="text" name="brand" style="padding:0.45rem 0.6rem; border:1px solid #e5e7eb; border-radius:0.4rem;">
+      </label>
+      <label style="display:flex; flex-direction:column; gap:0.2rem; font-size:0.85rem;">Kategori
+        <input type="text" name="category" style="padding:0.45rem 0.6rem; border:1px solid #e5e7eb; border-radius:0.4rem;">
+      </label>
+    </div>
+
+    <label style="display:flex; flex-direction:column; gap:0.2rem; font-size:0.85rem;">Açıklama
+      <textarea name="description" rows="3" style="padding:0.45rem 0.6rem; border:1px solid #e5e7eb; border-radius:0.4rem; resize:vertical; font-family:inherit;"></textarea>
     </label>
-    <label style="display:flex; flex-direction:column; gap:0.2rem; font-size:0.85rem;">İndirim (%)
-      <input type="number" name="discount_percent" step="0.1" min="0" max="100" style="padding:0.45rem 0.6rem; border:1px solid #e5e7eb; border-radius:0.4rem;">
-    </label>
-    <label style="display:flex; flex-direction:column; gap:0.2rem; font-size:0.85rem;">Stok
-      <input type="number" name="stock" value="50" min="0" style="padding:0.45rem 0.6rem; border:1px solid #e5e7eb; border-radius:0.4rem;">
-    </label>
-    <label style="display:flex; flex-direction:column; gap:0.2rem; font-size:0.85rem;">Kategori
-      <input type="text" name="category" style="padding:0.45rem 0.6rem; border:1px solid #e5e7eb; border-radius:0.4rem;">
-    </label>
-    <label style="display:flex; flex-direction:column; gap:0.2rem; font-size:0.85rem;">Görsel URL
-      <input type="url" name="image_url" style="padding:0.45rem 0.6rem; border:1px solid #e5e7eb; border-radius:0.4rem;">
-    </label>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.6rem;">
+      <label style="display:flex; flex-direction:column; gap:0.2rem; font-size:0.85rem;">Fiyat (TL) <span style="color:#dc2626;">*</span>
+        <input type="number" name="price" step="0.01" min="0" required style="padding:0.45rem 0.6rem; border:1px solid #e5e7eb; border-radius:0.4rem;">
+      </label>
+      <label style="display:flex; flex-direction:column; gap:0.2rem; font-size:0.85rem;">İndirim
+        <input type="number" name="discount" step="0.01" min="0" style="padding:0.45rem 0.6rem; border:1px solid #e5e7eb; border-radius:0.4rem;">
+      </label>
+      <label style="display:flex; flex-direction:column; gap:0.2rem; font-size:0.85rem;">İnd. Tipi
+        <select name="discount_type" style="padding:0.45rem 0.6rem; border:1px solid #e5e7eb; border-radius:0.4rem; background:#fff;">
+          <option value="">—</option>
+          <option value="percentage">%</option>
+          <option value="fixed">TL (sabit)</option>
+        </select>
+      </label>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.6rem;">
+      <label style="display:flex; flex-direction:column; gap:0.2rem; font-size:0.85rem;">Stok
+        <input type="number" name="stock" value="50" min="0" style="padding:0.45rem 0.6rem; border:1px solid #e5e7eb; border-radius:0.4rem;">
+      </label>
+      <label style="display:flex; flex-direction:column; gap:0.2rem; font-size:0.85rem;">Rating (0-5)
+        <input type="number" name="rating" step="0.1" min="0" max="5" style="padding:0.45rem 0.6rem; border:1px solid #e5e7eb; border-radius:0.4rem;">
+      </label>
+      <label style="display:flex; flex-direction:column; gap:0.2rem; font-size:0.85rem;">Rating Sayısı
+        <input type="number" name="rating_count" step="1" min="0" style="padding:0.45rem 0.6rem; border:1px solid #e5e7eb; border-radius:0.4rem;">
+      </label>
+    </div>
+
+    <!-- Görseller (dinamik) -->
+    <fieldset style="border:1px solid #e5e7eb; border-radius:0.5rem; padding:0.6rem; display:flex; flex-direction:column; gap:0.4rem;">
+      <legend style="font-size:0.8rem; color:#374151; padding:0 0.25rem;">Görseller</legend>
+      <div data-images-list style="display:flex; flex-direction:column; gap:0.35rem;">
+        <div data-image-row style="display:flex; gap:0.35rem; align-items:center;">
+          <input type="url" placeholder="https://…" style="flex:1; padding:0.4rem 0.55rem; border:1px solid #e5e7eb; border-radius:0.4rem;">
+          <button type="button" data-remove-row title="Sil"
+                  style="padding:0.3rem 0.55rem; background:#fff; color:#dc2626; border:1px solid #fecaca; border-radius:0.4rem; cursor:pointer;">−</button>
+        </div>
+      </div>
+      <button type="button" data-add-image
+              style="padding:0.35rem 0.65rem; background:#fff; color:#111827; border:1px dashed #d1d5db; border-radius:0.4rem; cursor:pointer; font-size:0.8rem; align-self:flex-start;">+ Görsel ekle</button>
+    </fieldset>
+
+    <!-- Yorumlar (dinamik) -->
+    <fieldset style="border:1px solid #e5e7eb; border-radius:0.5rem; padding:0.6rem; display:flex; flex-direction:column; gap:0.4rem;">
+      <legend style="font-size:0.8rem; color:#374151; padding:0 0.25rem;">Yorumlar</legend>
+      <div data-reviews-list style="display:flex; flex-direction:column; gap:0.5rem;"></div>
+      <button type="button" data-add-review
+              style="padding:0.35rem 0.65rem; background:#fff; color:#111827; border:1px dashed #d1d5db; border-radius:0.4rem; cursor:pointer; font-size:0.8rem; align-self:flex-start;">+ Yorum ekle</button>
+    </fieldset>
+
+    <!-- SSS (dinamik) -->
+    <fieldset style="border:1px solid #e5e7eb; border-radius:0.5rem; padding:0.6rem; display:flex; flex-direction:column; gap:0.4rem;">
+      <legend style="font-size:0.8rem; color:#374151; padding:0 0.25rem;">Sıkça Sorulan Sorular</legend>
+      <div data-faqs-list style="display:flex; flex-direction:column; gap:0.5rem;"></div>
+      <button type="button" data-add-faq
+              style="padding:0.35rem 0.65rem; background:#fff; color:#111827; border:1px dashed #d1d5db; border-radius:0.4rem; cursor:pointer; font-size:0.8rem; align-self:flex-start;">+ SSS ekle</button>
+    </fieldset>
+
     <div style="display:flex; gap:0.5rem; justify-content:flex-end; margin-top:0.4rem;">
       <button type="button" data-modal-cancel
               style="padding:0.5rem 1rem; background:#fff; color:#374151; border:1px solid #e5e7eb; border-radius:0.5rem; cursor:pointer;">İptal</button>

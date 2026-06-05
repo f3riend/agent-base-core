@@ -919,3 +919,264 @@ _IMPACT_DESCRIPTIONS = {
 
 def _impact_for(insight_type: str) -> str:
     return _IMPACT_DESCRIPTIONS.get(insight_type, "operasyonel performans")
+
+
+# ---------------------------------------------------------------------------
+# Faz 5 — PostgreSQL ürün/yorum retrieval'ı.
+#
+# Mevcut SQLite (listener.db / fake_ai_api.db) retriever'larına dokunulmuyor.
+# Buradaki fonksiyonlar SADECE yeni PG tabloları (stores, products,
+# product_reviews, product_faqs) üzerinde çalışır. SessionLocal app/core'dan
+# lazy-import edilir — circular import riskini azaltır.
+# ---------------------------------------------------------------------------
+
+
+def _pg_find_product_with_reviews(user_id: int, text: str) -> tuple[dict | None, list[dict]]:
+    """Soru metni içinde geçen ürünü PG'de bul + yorumlarını döndür.
+
+    Match algoritması:
+      - Kullanıcıya ait tüm ürün adlarını çek
+      - Ürün adındaki 2+ karakterlik tüm kelimeler soru içinde geçiyorsa eşleşir
+      - Çoklu eşleşmede en uzun toplam karakter olanı kazanır (daha spesifik)
+    """
+    from app.core.database import SessionLocal
+    from app.models.product import Product
+    from app.models.store import Store
+    # SQLAlchemy string-based relationship/order_by referansları için
+    # bağımlı model'lerin registry'ye yüklenmesi şart. noqa: F401 — tipler
+    # bu fonksiyon içinde doğrudan referans almıyor, mapper init için var.
+    from app.models.product_image import ProductImage  # noqa: F401
+    from app.models.product_review import ProductReview  # noqa: F401
+    from app.models.product_faq import ProductFaq  # noqa: F401
+    from app.models.product_metrics_weekly import ProductMetricsWeekly  # noqa: F401
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    text_lower = (text or "").lower()
+    if not text_lower:
+        return None, []
+
+    with SessionLocal() as session:
+        products = list(
+            session.scalars(
+                select(Product).join(Store).where(Store.user_id == int(user_id))
+            ).all()
+        )
+        if not products:
+            return None, []
+
+        best = None
+        best_score = 0.0
+        for p in products:
+            name_lower = (p.name or "").lower()
+            words = [w for w in name_lower.replace("-", " ").split() if len(w) > 2]
+            if not words:
+                # Çok kısa / tek harfli isim — düz substring dene
+                if name_lower and name_lower in text_lower:
+                    score = float(len(name_lower))
+                    if score > best_score:
+                        best, best_score = p, score
+                continue
+            matched = [w for w in words if w in text_lower]
+            if not matched:
+                continue
+            # Eşleşme şartı: 2+ kelimeli ürün adlarında en az 2 kelime match;
+            # tek kelimeli (nadir) için 1 yeterli. Bu, "Aula klavye yorumları"
+            # gibi kısa sorguların uzun ürün adlarıyla eşleşmesini sağlar.
+            min_required = 2 if len(words) >= 2 else 1
+            if len(matched) < min_required:
+                continue
+            # Score = eşleşen toplam karakter * (eşleşme/toplam) — daha spesifik
+            # (tüm kelimeleri geçen) ad, az kelimesi geçen uzun ad'ı yener.
+            score = sum(len(w) for w in matched) * (len(matched) / len(words))
+            if score > best_score:
+                best, best_score = p, score
+
+        if best is None:
+            return None, []
+
+        # Eager-load yorumlar (ve faqs ek bağlam için)
+        full = session.scalar(
+            select(Product)
+            .where(Product.id == best.id)
+            .options(
+                selectinload(Product.reviews),
+                selectinload(Product.faqs),
+                selectinload(Product.images),
+            )
+        )
+        if full is None:
+            return None, []
+
+        product_dict = {
+            "id": str(full.id),
+            "name": full.name,
+            "brand": full.brand,
+            "category": full.category,
+            "currency": full.currency,
+            "status": full.status,
+            "price": float(full.price) if full.price is not None else None,
+            "discount": float(full.discount) if full.discount is not None else None,
+            "discount_type": full.discount_type,
+            "stock": full.stock,
+            "rating": float(full.rating) if full.rating is not None else None,
+            "rating_count": full.rating_count,
+            "trend_pct": float(full.trend_pct) if full.trend_pct is not None else None,
+            "weekly_sales": full.weekly_sales,
+            "weekly_revenue": (
+                float(full.weekly_revenue) if full.weekly_revenue is not None else None
+            ),
+            "description": full.description,
+            "thumb_url": (full.images[0].url if full.images else None),
+            "faqs_count": len(full.faqs or []),
+        }
+        reviews_list: list[dict] = []
+        for r in (full.reviews or []):
+            reviews_list.append({
+                "rating": int(r.rating) if r.rating is not None else None,
+                "content": r.content,
+                "review_date": r.review_date,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            })
+        return product_dict, reviews_list
+
+
+def _summarize_reviews(product: dict, reviews: list[dict]) -> tuple[str, dict]:
+    """Deterministic Türkçe özet + analitik metadata (LLM context'i için)."""
+    name = product.get("name") or "Ürün"
+    n = len(reviews)
+    if n == 0:
+        answer = f"{name} için henüz yorum yok."
+        return answer, {"avg_rating": None, "distribution": {}, "samples": []}
+
+    ratings = [r["rating"] for r in reviews if isinstance(r.get("rating"), (int, float))]
+    avg = round(sum(ratings) / len(ratings), 2) if ratings else None
+    distribution = {str(i): 0 for i in range(1, 6)}
+    for r in ratings:
+        if 1 <= r <= 5:
+            distribution[str(int(r))] += 1
+    pos = sum(1 for r in ratings if r >= 4)
+    neu = sum(1 for r in ratings if r == 3)
+    neg = sum(1 for r in ratings if r <= 2)
+
+    parts: list[str] = [f"**{name}** için {n} yorum mevcut."]
+    if avg is not None:
+        parts.append(f"Yorum-ortalama puan {avg}/5.")
+    if ratings:
+        parts.append(f"Olumlu {pos}, nötr {neu}, olumsuz {neg}.")
+
+    # Örnek 3 yorum (en uzun içerikten kısalt)
+    samples = []
+    for r in reviews:
+        c = (r.get("content") or "").strip()
+        if c:
+            samples.append({
+                "rating": r.get("rating"),
+                "content": c[:200],
+                "review_date": r.get("review_date"),
+            })
+        if len(samples) >= 3:
+            break
+    if samples:
+        parts.append("\nÖrnek yorumlar:")
+        for s in samples:
+            tag = f"({s['rating']}/5) " if s.get("rating") else ""
+            parts.append(f"  • {tag}{s['content']}")
+
+    return "\n".join(parts), {
+        "avg_rating": avg,
+        "distribution": distribution,
+        "positive_count": pos,
+        "neutral_count": neu,
+        "negative_count": neg,
+        "samples": samples,
+    }
+
+
+def product_reviews_lookup(
+    user_id: int = 1,
+    question: str | None = None,
+    active_entity_label: str | None = None,
+    **_: Any,
+) -> dict:
+    """Faz 5 — soru içinde geçen ürünün PG'den yorumlarını çek.
+
+    Akış (iki kademeli ürün arama):
+      1. Soru metninde ürün adı algılanırsa PG'den ürün + yorumlar + faqs çek.
+      2. Soruda ürün geçmiyorsa (follow-up: "peki neden?", "detaylandır"):
+         önce `active_entity_label` kwarg'ı, yoksa SQLite chat_sessions'taki
+         son aktif `active_entity_label` kullanılır.
+      3. Yine bulunamazsa sentiment_status'a delegate edilir (genel duyarlılık).
+
+    business_chat._entity_from_retrieval `data.item`'ı active_entity olarak
+    yakalar; bir sonraki turda label otomatik dolacağı için zincir tutarlı.
+    """
+    text = (question or "").strip()
+    product: dict | None = None
+    reviews: list[dict] = []
+    pg_error = False
+
+    # 1. kademe: doğrudan soru metniyle ara
+    if text:
+        try:
+            product, reviews = _pg_find_product_with_reviews(user_id=int(user_id), text=text)
+        except Exception as exc:
+            print(f"[RETRIEVAL] product_reviews_lookup PG error: {exc}")
+            pg_error = True
+
+    # 2. kademe: sorudan ürün çıkmadıysa (ve PG sağlamsa) active_entity_label'a düş
+    if not pg_error and product is None:
+        label = (active_entity_label or "").strip()
+        # kwarg'dan gelmediyse SQLite chat_sessions'tan son aktif label'ı al
+        if not label:
+            try:
+                row = execute_query(
+                    """
+                    SELECT active_entity_label FROM chat_sessions
+                    WHERE user_id=?
+                      AND TRIM(COALESCE(active_entity_label, '')) != ''
+                    ORDER BY last_turn_at DESC NULLS LAST, opened_at DESC
+                    LIMIT 1
+                    """,
+                    (int(user_id),),
+                    one=True,
+                )
+                if row is not None:
+                    # sqlite3.Row indexed access; .get() yok.
+                    val = row["active_entity_label"]
+                    label = str(val or "").strip()
+            except Exception as exc:
+                print(f"[RETRIEVAL] active_entity_label lookup failed: {exc}")
+
+        if label:
+            try:
+                product, reviews = _pg_find_product_with_reviews(
+                    user_id=int(user_id), text=label
+                )
+            except Exception as exc:
+                print(f"[RETRIEVAL] product_reviews_lookup PG (label) error: {exc}")
+
+    if product is None:
+        # Hâlâ eşleşmedi — genel sentiment'a düş
+        return sentiment_status(user_id=user_id)
+
+    answer, summary = _summarize_reviews(product, reviews)
+
+    return {
+        "intent": "product_reviews_lookup",
+        "routed_intent": "product_reviews_lookup",
+        "answer": answer,
+        "data": {
+            "item": product,
+            "reviews": reviews,
+            "reviews_total": len(reviews),
+            "avg_rating_from_reviews": summary["avg_rating"],
+            "rating_distribution": summary["distribution"],
+            "positive_count": summary.get("positive_count", 0),
+            "neutral_count": summary.get("neutral_count", 0),
+            "negative_count": summary.get("negative_count", 0),
+            "sample_reviews": summary["samples"],
+        },
+        "recommendations": [],
+        "confidence": 0.88 if reviews else 0.55,
+    }

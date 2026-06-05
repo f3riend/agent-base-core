@@ -884,10 +884,28 @@ def _build_campaign_banner_revision_prompt(
 
 
 def _download_image(image_url: str) -> tuple[bytes, str]:
-    """Download an image URL into bytes with strict validation."""
+    """Download an image URL into bytes with strict validation.
+    data:image/... URI'lerini de destekler (base64 decode)."""
     url = (image_url or "").strip()
     if not url:
         raise ValueError("Image URL must not be empty.")
+    
+    # data URI desteği — base64 inline görsel (local disk'ten okunan)
+    if url.startswith("data:"):
+        try:
+            import base64 as _b64
+            # data:image/jpeg;base64,/9j/4AAQ...
+            header, encoded = url.split(",", 1)
+            mime = header.split(";")[0].replace("data:", "").strip()
+            if not mime.startswith("image/"):
+                raise ValueError(f"Geçersiz data URI mime tipi: {mime}")
+            data = _b64.b64decode(encoded)
+            if not data:
+                raise RuntimeError("Data URI body is empty.")
+            return data, mime
+        except Exception as exc:
+            raise RuntimeError(f"Data URI decode failed: {exc}") from exc
+
     try:
         resp = requests.get(url, timeout=_DOWNLOAD_TIMEOUT_S, stream=True)
     except requests.RequestException as exc:
@@ -1178,7 +1196,7 @@ def _generate_openai_edit_and_store(
         raise RuntimeError("OpenAI image edit request failed.") from exc
     if not raw:
         raise RuntimeError("OpenAI image edit returned empty bytes.")
-    raw, mime = _fit_image_bytes_to_size(raw, mime, target_size, cover=_is_campaign_banner_canvas(target_size))
+    raw, mime = _fit_image_bytes_to_size(raw, mime, target_size, cover=True)
     ext = "png" if "png" in (mime or "").lower() else "jpg"
     url = _upload_image_bytes(raw, f"{filename_prefix}-{uuid.uuid4().hex[:10]}.{ext}", mime)
     return {"url": url}
@@ -1226,7 +1244,7 @@ def _generate_openai_edit_multi_and_store(
         raise RuntimeError("OpenAI multi image edit request failed.") from exc
     if not raw:
         raise RuntimeError("OpenAI image edit returned empty bytes.")
-    raw, mime = _fit_image_bytes_to_size(raw, mime, target_size, cover=_is_campaign_banner_canvas(target_size))
+    raw, mime = _fit_image_bytes_to_size(raw, mime, target_size, cover=True)
     ext = "png" if "png" in (mime or "").lower() else "jpg"
     url = _upload_image_bytes(raw, f"{filename_prefix}-{uuid.uuid4().hex[:10]}.{ext}", mime)
     return {"url": url}

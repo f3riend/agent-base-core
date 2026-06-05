@@ -33,5 +33,16 @@ def init_db() -> None:
     from app.models.social_document import SocialDocument  # noqa: F401
     from app.models.usage_event import UsageEvent  # noqa: F401
     from app.models.user import User  # noqa: F401
+    # Yeni commerce + chat tabloları (Faz 1)
+    from app.models.store import Store  # noqa: F401
+    from app.models.product import Product  # noqa: F401
+    from app.models.product_image import ProductImage  # noqa: F401
+    from app.models.product_review import ProductReview  # noqa: F401
+    from app.models.product_faq import ProductFaq  # noqa: F401
+    from app.models.product_metrics_weekly import ProductMetricsWeekly  # noqa: F401
+    from app.models.system_snapshot import SystemSnapshot  # noqa: F401
+    from app.models.chat_session import ChatSession  # noqa: F401
+    from app.models.chat_message import ChatMessage  # noqa: F401
+    from app.models.chat_memory import ChatMemory  # noqa: F401
 
     Base.metadata.create_all(bind=engine)

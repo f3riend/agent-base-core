@@ -280,17 +280,22 @@ def _fetch_template_from_mysql(
     channel: str | None = None,
     module: str = "social_media",
 ) -> dict | None:
-    """MySQL content_templates / campaign_templates'tan şablon getir.
+    """social_documents'tan şablon getir (iki aşamalı arama).
 
-    module='campaign' verilirse campaign_templates + campaign_templates_global
-    koleksiyonlarında arama yapılır. Diğer durumlarda content_templates +
-    content_templates_global (mevcut SM davranışı).
+    is_campaign (module='campaign' veya channel='banner') True ise
+        Aşama 1: campaign_templates + campaign_templates_global
+        Aşama 2: content_templates + content_templates_global (fallback)
+    Aksi halde
+        Aşama 1: content_templates + content_templates_global
+        Aşama 2: campaign_templates + campaign_templates_global (fallback)
 
-    channel='story' verilirse outputSize='story' olan şablonları önceliklendir
-    (önce dener, eşleşme yoksa generic aramaya düşer). Diğer durumlarda direkt
-    title/name/templateName/doc_id eşleşmesi yapılır.
+    Böylece operatör şablonu campaign mi content mi koleksiyonuna kaydetmiş
+    fark etmez — biri boşsa diğerinde bulunur.
 
-    MySQL bağlanamazsa veya kayıt yoksa graceful None döner.
+    channel='story' verilirse outputSize='story' olan şablonları önceliklendir;
+    aşama başına önce sql_story sonra sql_any denenir, ilk eşleşme kazanır.
+
+    DB bağlanamazsa veya kayıt yoksa graceful None döner.
     """
     if not template_name:
         return None
@@ -300,46 +305,52 @@ def _fetch_template_from_mysql(
         (module or "").strip().lower() == "campaign"
         or (channel or "").strip().lower() == "banner"
     )
-    tpl_collections = (
-        "'campaign_templates','campaign_templates_global'" if is_campaign
-        else "'content_templates','content_templates_global'"
+    campaign_set = "'campaign_templates','campaign_templates_global'"
+    content_set = "'content_templates','content_templates_global'"
+    search_sets = (
+        [campaign_set, content_set] if is_campaign
+        else [content_set, campaign_set]
     )
     try:
         from app.core.database import SessionLocal
         from sqlalchemy import text
 
-        # Story için outputSize='story' filtresiyle önce dene
-        sql_story = (
-            "SELECT payload FROM social_documents "
-            f"WHERE collection IN ({tpl_collections}) "
-            "AND ("
-            " LOWER(JSON_UNQUOTE(JSON_EXTRACT(payload,'$.title'))) LIKE :pat"
-            " OR LOWER(JSON_UNQUOTE(JSON_EXTRACT(payload,'$.name'))) LIKE :pat"
-            " OR LOWER(JSON_UNQUOTE(JSON_EXTRACT(payload,'$.templateName'))) LIKE :pat"
-            " OR LOWER(doc_id) LIKE :pat"
-            ") "
-            "AND LOWER(JSON_UNQUOTE(JSON_EXTRACT(payload,'$.outputSize'))) = 'story' "
-            "ORDER BY id DESC LIMIT 1"
-        )
-        # Genel arama (story filtresi yok)
-        sql_any = (
-            "SELECT payload FROM social_documents "
-            f"WHERE collection IN ({tpl_collections}) "
-            "AND ("
-            " LOWER(JSON_UNQUOTE(JSON_EXTRACT(payload,'$.title'))) LIKE :pat"
-            " OR LOWER(JSON_UNQUOTE(JSON_EXTRACT(payload,'$.name'))) LIKE :pat"
-            " OR LOWER(JSON_UNQUOTE(JSON_EXTRACT(payload,'$.templateName'))) LIKE :pat"
-            " OR LOWER(doc_id) LIKE :pat"
-            ") "
-            "ORDER BY id DESC LIMIT 1"
-        )
-
         with SessionLocal() as db:
             row = None
-            if is_story:
-                row = db.execute(text(sql_story), {"pat": pat}).fetchone()
-            if not row:
-                row = db.execute(text(sql_any), {"pat": pat}).fetchone()
+            for tpl_collections in search_sets:
+                # Story için outputSize='story' filtresiyle önce dene
+                sql_story = (
+                    "SELECT payload FROM social_documents "
+                    f"WHERE collection IN ({tpl_collections}) "
+                    "AND ("
+                    " LOWER(payload->>'title') LIKE :pat"
+                    " OR LOWER(payload->>'name') LIKE :pat"
+                    " OR LOWER(payload->>'templateName') LIKE :pat"
+                    " OR LOWER(doc_id) LIKE :pat"
+                    ") "
+                    "AND LOWER(payload->>'outputSize') = 'story' "
+                    "ORDER BY id DESC LIMIT 1"
+                )
+                # Genel arama (story filtresi yok)
+                sql_any = (
+                    "SELECT payload FROM social_documents "
+                    f"WHERE collection IN ({tpl_collections}) "
+                    "AND ("
+                    " LOWER(payload->>'title') LIKE :pat"
+                    " OR LOWER(payload->>'name') LIKE :pat"
+                    " OR LOWER(payload->>'templateName') LIKE :pat"
+                    " OR LOWER(doc_id) LIKE :pat"
+                    ") "
+                    "ORDER BY id DESC LIMIT 1"
+                )
+                stage_row = None
+                if is_story:
+                    stage_row = db.execute(text(sql_story), {"pat": pat}).fetchone()
+                if not stage_row:
+                    stage_row = db.execute(text(sql_any), {"pat": pat}).fetchone()
+                if stage_row:
+                    row = stage_row
+                    break  # primary set'te bulundu, fallback'e gerek yok
             if row and row[0]:
                 payload = row[0]
                 if isinstance(payload, str):
@@ -442,10 +453,13 @@ def _ai_generate_caption(
         rule_name = (rule_meta or {}).get("name") or "kural"
 
         sys_msg = (
-            "Sen bir sosyal medya içerik uzmanısın. Türkçe, etkileyici, "
-            "kısa ve öz paylaşım metinleri yazıyorsun. Verilen ürün/mağaza "
-            "bilgilerini ve şablon talimatlarını kullanarak platforma uygun "
-            "içerik üretiyorsun."
+            "Sen bir sosyal medya içerik uzmanısın. SADECE Türkçe paylaşım "
+            "metinleri yazarsın. Şablon talimatı veya ürün bilgisi İngilizce "
+            "olsa bile çıktın TAMAMEN Türkçe olur — İngilizce kelime, marka "
+            "sloganı veya hashtag KULLANMA. Marka/ürün adlarını koruyabilirsin "
+            "ama açıklama, çağrı ve hashtag'ler Türkçe. Verilen ürün/mağaza "
+            "bilgilerini ve şablon talimatlarını kullanarak platforma uygun, "
+            "etkileyici, kısa ve öz içerik üretirsin."
         )
         user_msg = (
             f"{channel_name} için sosyal medya paylaşım metni yaz.\n"
@@ -453,11 +467,14 @@ def _ai_generate_caption(
             f"ÜRÜN/MAĞAZA BİLGİLERİ:\n{ctx_str}\n"
             + (f"\nŞABLON TALİMATI:\n{template_instruction}\n" if template_instruction else "")
             + "\nKURALLAR:\n"
-            "- Maksimum 3 cümle\n"
-            "- İlgili hashtag'leri ekle (5-7 adet, # işaretiyle)\n"
-            "- Türkçe yaz\n"
-            "- Samimi ve etkileyici bir dil kullan\n"
-            "- Sadece paylaşım metnini yaz, başka açıklama ekleme\n"
+            "- ZORUNLU: Tüm metin Türkçe olmalı. İngilizce kelime kullanma.\n"
+            "  (Marka/ürün adı haricinde; örn. 'Razer Cobra' kalabilir ama "
+            "  cümle Türkçe.)\n"
+            "- Hashtag'ler de Türkçe olsun (örn. #YeniÜrün, #İndirim, #Hediye).\n"
+            "- Maksimum 3 cümle.\n"
+            "- İlgili hashtag'leri ekle (5-7 adet, # işaretiyle).\n"
+            "- Samimi ve etkileyici bir dil kullan.\n"
+            "- Sadece paylaşım metnini yaz, başka açıklama ekleme.\n"
         )
         completion = client.chat.completions.create(
             model=_os.environ.get("CONTENT_LLM_MODEL", "gpt-4o-mini"),
@@ -507,6 +524,79 @@ def _extract_hashtags(text_value: str) -> list[str]:
     return [m.lstrip("#") for m in _re.findall(r"#\w+", text_value)]
 
 
+def _resolve_openai_key_for_state(state: RuleExecutionState | dict | None) -> str | None:
+    """OpenAI API key'i state → env → DB (workspace app_settings) sırasında ara.
+
+    Celery worker'da env'de OPENAI_API_KEY olmayabilir; key UI'dan workspace'a
+    yazılır (app/api/social_media._resolve_workspace_openai_key ile aynı kaynak).
+    state.user_id → User.workspace_uid → SocialDocument(app_settings/api_keys).
+    Bulamazsa None döner; çağıran taraf graceful fallback'e gider.
+    """
+    # 1) State içinde explicit key var mı (gelecekte enjekte edilebilir)
+    if isinstance(state, dict):
+        for path in (("openai_api_key",), ("rule", "openai_api_key"), ("event", "openai_api_key")):
+            cur = state
+            for p in path:
+                cur = cur.get(p) if isinstance(cur, dict) else None
+                if cur is None:
+                    break
+            if isinstance(cur, str) and cur.strip():
+                return cur.strip()
+
+    # 2) Env (lokal dev / docker)
+    import os as _os
+    env_key = (_os.environ.get("OPENAI_API_KEY") or "").strip()
+    if env_key:
+        return env_key
+
+    # 3) DB lookup — user_id → workspace_uid → app_settings/api_keys.openaiApiKey
+    user_id = state.get("user_id") if isinstance(state, dict) else None
+    if not user_id:
+        return None
+    try:
+        from sqlalchemy import desc, select
+        from app.core.database import SessionLocal
+        from app.models.social_document import SocialDocument
+        from app.models.user import User
+        # social_media.py'deki sabitlerle aynı (avoid circular import — inline)
+        APP_SETTINGS_COLLECTION = "app_settings"
+        APP_SETTINGS_DOC_ID = "api_keys"
+        with SessionLocal() as db:
+            user = db.scalar(select(User).where(User.id == int(user_id)))
+            if user is None or not getattr(user, "workspace_uid", None):
+                return None
+            wsid = user.workspace_uid
+            doc = db.scalar(
+                select(SocialDocument).where(
+                    SocialDocument.workspace_uid == wsid,
+                    SocialDocument.collection == APP_SETTINGS_COLLECTION,
+                    SocialDocument.doc_id == APP_SETTINGS_DOC_ID,
+                )
+            )
+            if doc is not None:
+                payload = dict(doc.payload or {})
+                key = str(payload.get("openaiApiKey") or "").strip()
+                if key:
+                    return key
+            # Fallback: app_settings koleksiyonunun en son güncellenen kaydı
+            any_doc = db.scalar(
+                select(SocialDocument)
+                .where(
+                    SocialDocument.workspace_uid == wsid,
+                    SocialDocument.collection == APP_SETTINGS_COLLECTION,
+                )
+                .order_by(desc(SocialDocument.updated_at))
+            )
+            if any_doc is not None:
+                payload = dict(any_doc.payload or {})
+                key = str(payload.get("openaiApiKey") or "").strip()
+                if key:
+                    return key
+    except Exception as exc:
+        print(f"[_resolve_openai_key_for_state] DB lookup failed: {exc}")
+    return None
+
+
 def _generate_image_via_pipeline(
     *,
     prompt: str,
@@ -518,26 +608,18 @@ def _generate_image_via_pipeline(
     channel: str,
     output_size: str | None,
     skip_professionalization: bool = False,
+    openai_api_key: str | None = None,
 ) -> str | None:
-    """`_sync_generate_images_task`'i çağırıp görsel üret. Ürün + logo + şablon
-    görselleri referans listesinin sırasıyla pipeline'a verilir.
-
-    DOĞRU öncelik sırası (manuel UI ile aynı semantik):
-        1. Ürün fotoğraf(lar)ı     — BİRİNCİL: ne üretileceğini belirler
-        2. Mağaza logosu           — İKİNCİL: tasarıma dahil edilir
-        3. Şablon görsel(ler)i     — LAYOUT REHBERİ: stil/yapı referansı
-    Hepsi `_check_url_alive` ile filtrelenir; ölü URL pipeline'a geçmez.
-
-    Returns:
-        Üretilen yeni image URL veya None.
-    """
     import os as _os
     fal_key = (_os.environ.get("FAL_KEY") or "").strip() or None
-    openai_key = (_os.environ.get("OPENAI_API_KEY") or "").strip() or None
+    openai_key = (
+        (openai_api_key or "").strip()
+        or (_os.environ.get("OPENAI_API_KEY") or "").strip()
+        or None
+    )
     if not fal_key and not openai_key:
         return None
 
-    # Tüm referansları birleştir + alive filtre — DOĞRU öncelik sırası
     all_refs: list[str] = []
     seen: set[str] = set()
 
@@ -547,56 +629,71 @@ def _generate_image_via_pipeline(
         s = u.strip() if isinstance(u, str) else ""
         if not s or s in seen:
             return
-        # Harici CDN URL'leri için alive check toleranslı:
-        # check başarısız olsa bile listeye ekle, pipeline denesin.
         import urllib.parse as _up
         parsed = _up.urlparse(s)
         is_local = parsed.hostname in ("127.0.0.1", "localhost", "0.0.0.0")
         if is_local:
-            if _check_url_alive(s):
-                seen.add(s); all_refs.append(s)
+            try:
+                from app.services.local_media_storage import get_media_root
+                import base64 as _b64
+                marker = "/media/"
+                if marker in s:
+                    rel = s.split(marker, 1)[1].split("?", 1)[0]
+                    file_path = _os.path.join(get_media_root(), rel)
+                    if _os.path.isfile(file_path):
+                        with open(file_path, "rb") as _f:
+                            raw = _f.read()
+                        ext = file_path.rsplit(".", 1)[-1].lower()
+                        mime = (
+                            "image/png" if ext == "png"
+                            else "image/webp" if ext == "webp"
+                            else "image/jpeg"
+                        )
+                        data_uri = f"data:{mime};base64,{_b64.b64encode(raw).decode()}"
+                        if data_uri not in seen:
+                            seen.add(data_uri)
+                            all_refs.append(data_uri)
+            except Exception as _exc:
+                pass
         else:
-            alive = _check_url_alive(s)
-            if not alive:
-                print(f"[_generate_image_via_pipeline] external URL alive-check failed but pushing anyway: {s}")
-            seen.add(s); all_refs.append(s)
+            seen.add(s)
+            all_refs.append(s)
 
-    # 1) ÜRÜN FOTOĞRAFI — BİRİNCİL referans (ne üretileceğini belirler)
-    if product_image_urls:
-        for u in product_image_urls:
-            _push(u)
-    elif product_image_url:
-        _push(product_image_url)
-
-    # 2) MAĞAZA LOGOSU — tasarıma dahil edilir
-    _push(store_logo_url)
-
-    # 3) ŞABLON GÖRSELİ — layout/stil rehberi (singular önce, sonra plural)
+    # 1) ŞABLON GÖRSELİ — BİRİNCİL (zemin/layout)
     _push(reference_image_url)
     if reference_image_urls:
         for entry in reference_image_urls:
             url = entry if isinstance(entry, str) else (entry or {}).get("url", "")
             _push(url)
 
+    # 2) ÜRÜN FOTOĞRAFI — İKİNCİL (şablona yerleştirilir)
+    if product_image_urls:
+        for u in product_image_urls:
+            _push(u)
+    elif product_image_url:
+        _push(product_image_url)
+
+    # 3) MAĞAZA LOGOSU
+    _push(store_logo_url)
+
     primary_ref = all_refs[0] if all_refs else None
 
-    # Prompt zenginleştirme — AI'a referansların rolünü açıkça söyle
     extras_text: list[str] = []
-    if product_image_url or product_image_urls:
-        extras_text.append(
-            "The product image is the PRIMARY subject — feature it prominently in the design"
-        )
     if reference_image_url or reference_image_urls:
         extras_text.append(
-            "Use the template image as layout/design reference only — "
-            "adapt its style and structure for the product"
+            "Use the template image as the PRIMARY base layout — "
+            "keep its design structure, colors and composition"
+        )
+    if product_image_url or product_image_urls:
+        extras_text.append(
+            "Replace the product in the template with this product image, "
+            "keeping the template layout intact"
         )
     if store_logo_url:
         extras_text.append("Include the store logo subtly in the design")
     if extras_text:
         prompt = (prompt or "").strip() + ". " + ". ".join(extras_text) + "."
 
-    # Platform mapping
     plat = "story" if (channel or "").strip().lower() == "story" else "feed"
     try:
         from app.api.social_media import _sync_generate_images_task
@@ -830,6 +927,17 @@ def content_generator_node(state: RuleExecutionState) -> dict:
     if params_output_size:
         output_size = params_output_size
 
+    # Şablon ve params boyut vermediyse kanaldan deterministik türet —
+    # pipeline default'a (feed) düşmesin. story=1088x1920, post=1088x1360,
+    # banner=1600x704
+    if not output_size:
+        if channel in ("story", "instagram_story"):
+            output_size = "story"
+        elif channel in ("post", "instagram", "facebook"):
+            output_size = "post"
+        elif channel in ("banner", "campaign_banner"):
+            output_size = "campaign_banner"
+
     # Banner kanalı için her zaman campaign_banner boyutu
     if channel == "banner":
         output_size = "campaign_banner"
@@ -883,6 +991,9 @@ def content_generator_node(state: RuleExecutionState) -> dict:
     if not product_image_url and not product_image_urls_list and store_banner_url:
         product_image_url = store_banner_url
 
+    # OpenAI key — Celery worker'da env'de olmadığı için state/DB'den de bak
+    resolved_openai_key = _resolve_openai_key_for_state(state)
+
     generated_image_url = _generate_image_via_pipeline(
         prompt=image_prompt,
         reference_image_url=template_image_url,
@@ -893,6 +1004,7 @@ def content_generator_node(state: RuleExecutionState) -> dict:
         channel=channel,
         output_size=output_size,
         skip_professionalization=True,
+        openai_api_key=resolved_openai_key,
     )
     if generated_image_url:
         image_url = generated_image_url

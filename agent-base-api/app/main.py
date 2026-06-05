@@ -46,7 +46,7 @@ if str(_ROOT) not in sys.path:
 if os.getenv('APP_DISABLE_UVICORN_ACCESS_LOG', '1').strip().lower() in ('1', 'true', 'yes', 'on'):
     logging.getLogger('uvicorn.access').disabled = True
 
-from app.api import auth, client_debug, social_data, social_media
+from app.api import auth, client_debug, commerce, social_data, social_media
 from app.core.database import init_db
 from app.core.settings import settings
 from app.services.local_media_storage import get_media_root, use_local_media_storage
@@ -121,6 +121,8 @@ app.include_router(client_debug.router)
 app.include_router(social_data.router)
 app.include_router(social_media.router)
 app.include_router(social_media.legacy_router)
+# Faz 2: yeni commerce CRUD (/social-media/stores, /social-media/products)
+app.include_router(commerce.router)
 
 
 # -----------------------------------------------------------------------

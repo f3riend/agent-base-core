@@ -8,6 +8,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
 
 from agent_registry import list_agents
 from approval_service import (
@@ -1696,18 +1699,159 @@ class ProductImportRequest(BaseModel):
 
 
 @router.post("/chat")
-async def business_chat_endpoint(body: ChatRequest):
+async def business_chat_endpoint(body: ChatRequest, db: Session = Depends(get_db)):
+    """Chat ana endpoint'i.
+
+    Yan-yazma: business_chat (eski SQLite chat_sessions/chat_turns) zekayı
+    korumaya devam eder. Aynı turda yeni PG chat_sessions/chat_messages
+    tablolarına da yazıyoruz — UI sidebar bunları okur.
+
+    session_id: UI'dan UUID gelir; yoksa yeni session açılır.
+    """
     from business_chat import answer_question
-    return answer_question(
-        body.question, user_id=body.user_id, session_id=body.session_id,
+    from app.services.chat_session_service import (
+        append_message, derive_legacy_id, ensure_session,
     )
+
+    # 1) Yeni PG session'ı resolve/yarat
+    new_sess = ensure_session(
+        db,
+        user_id=body.user_id,
+        session_id=body.session_id,
+        first_message=body.question,
+    )
+
+    # 2) Eski SQLite session_id türet (business_chat aynı UUID üstünden
+    #    deterministik sess_<hex16> ile çalışır)
+    legacy_sid = derive_legacy_id(new_sess.id)
+
+    # 3) Asıl chat akışı (anti-rep, follow-up, conversational_rule_edit hep
+    #    eski sistem üzerinden çalışır)
+    result = answer_question(
+        body.question, user_id=body.user_id, session_id=legacy_sid,
+    )
+
+    # 4) Yan-yazma: kullanıcı sorusu + asistan cevabı PG'ye
+    try:
+        append_message(db, session_id=new_sess.id, role="user", content=body.question)
+        append_message(
+            db, session_id=new_sess.id, role="assistant",
+            content=str(result.get("answer") or ""),
+        )
+    except Exception as exc:
+        # Yan-yazma hatası chat cevabını engellemesin
+        print(f"[chat] PG yan-yazma hatası: {exc}")
+
+    # 5) UI'a yeni PG UUID dön (eski legacy sess_xxx değil)
+    result["session_id"] = str(new_sess.id)
+    return result
 
 
 @router.post("/chat/new-session")
-async def business_chat_new_session(user_id: int = Query(DEFAULT_USER_ID)):
-    """Open a fresh conversation context — the operator can 'reset' a chat."""
-    from conversation_memory import open_session
-    return {"data": open_session(user_id=user_id)}
+async def business_chat_new_session(
+    user_id: int = Query(DEFAULT_USER_ID),
+    db: Session = Depends(get_db),
+):
+    """Yeni boş session aç — UI 'reset chat' butonu için."""
+    from app.services.chat_session_service import ensure_session
+
+    sess = ensure_session(db, user_id=user_id, session_id=None, first_message=None)
+    return {
+        "data": {
+            "id": str(sess.id),
+            "user_id": sess.user_id,
+            "title": sess.title,
+            "created_at": sess.created_at.isoformat() if sess.created_at else None,
+            "last_message_at": sess.last_message_at.isoformat() if sess.last_message_at else None,
+        }
+    }
+
+
+# ---------------------------------------------------------------------------
+# Chat session yönetimi (UI sol panel için)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/chat/sessions")
+async def list_chat_sessions(
+    user_id: int = Query(DEFAULT_USER_ID),
+    limit: int = Query(200, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    """Kullanıcının chat session listesi — sidebar için (sıra: en yeni önce)."""
+    from app.services.chat_session_service import list_sessions
+
+    sessions = list_sessions(db, user_id=user_id, limit=limit)
+    return {
+        "data": [
+            {
+                "id": str(s.id),
+                "title": s.title,
+                "last_message_at": s.last_message_at.isoformat() if s.last_message_at else None,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+            }
+            for s in sessions
+        ]
+    }
+
+
+@router.get("/chat/sessions/{session_id}")
+async def get_chat_session(
+    session_id: str,
+    user_id: int = Query(DEFAULT_USER_ID),
+    db: Session = Depends(get_db),
+):
+    """Session detayı + mesajlar (kronolojik)."""
+    import uuid as _uuid
+    from app.services.chat_session_service import get_session_with_messages
+
+    try:
+        sid = _uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Geçersiz session_id (UUID bekleniyor).")
+
+    sess = get_session_with_messages(db, user_id=user_id, session_id=sid)
+    if sess is None:
+        raise HTTPException(status_code=404, detail="Session bulunamadı.")
+
+    return {
+        "data": {
+            "id": str(sess.id),
+            "title": sess.title,
+            "last_message_at": sess.last_message_at.isoformat() if sess.last_message_at else None,
+            "created_at": sess.created_at.isoformat() if sess.created_at else None,
+            "messages": [
+                {
+                    "id": str(m.id),
+                    "role": m.role,
+                    "content": m.content,
+                    "created_at": m.created_at.isoformat() if m.created_at else None,
+                }
+                for m in sess.messages
+            ],
+        }
+    }
+
+
+@router.delete("/chat/sessions/{session_id}")
+async def delete_chat_session(
+    session_id: str,
+    user_id: int = Query(DEFAULT_USER_ID),
+    db: Session = Depends(get_db),
+):
+    """Session sil — mesajlar CASCADE ile siler."""
+    import uuid as _uuid
+    from app.services.chat_session_service import delete_session
+
+    try:
+        sid = _uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Geçersiz session_id (UUID bekleniyor).")
+
+    ok = delete_session(db, user_id=user_id, session_id=sid)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Session bulunamadı.")
+    return {"deleted": True}
 
 
 @router.get("/trending-products")
