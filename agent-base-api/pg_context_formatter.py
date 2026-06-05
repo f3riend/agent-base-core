@@ -1,9 +1,5 @@
 """
 pg_context_formatter.py — pg_context dict'ini LLM prompt'u için metin bloğuna çevirir.
-
-business_query_router artık tek tip payload üretiyor: `full_context`.
-Bu modül o payload'ı (mağazalar + ürünler + her ürünün yorumları + SSS'leri)
-açıkça etiketli, sayıları kazara karıştırılması zor bir blok olarak yazar.
 """
 from __future__ import annotations
 
@@ -47,19 +43,38 @@ def _format_full_context(stores: list[dict], products: list[dict]) -> str:
                 metas.append(f"Marka: {p['brand']}")
             if p.get("category"):
                 metas.append(f"Kategori: {p['category']}")
-            if p.get("price") is not None:
-                metas.append(f"Fiyat: {p['price']} TL")
+            if p.get("sku"):
+                metas.append(f"SKU: {p['sku']}")
+
+            # Fiyat + maliyet + kar marjı
+            price = p.get("price")
+            cost = p.get("cost_price")
+            if price is not None:
+                metas.append(f"Fiyat: {price} TL")
+            if cost is not None and price is not None:
+                kar = float(price) - float(cost)
+                marj = (kar / float(price) * 100) if float(price) > 0 else 0
+                metas.append(f"Maliyet: {cost} TL | Kar: {kar:.2f} TL (%{marj:.1f} marj)")
             if p.get("discount"):
                 metas.append(f"İndirim: {p['discount']}")
-            if p.get("stock") is not None:
-                metas.append(f"Stok: {p['stock']}")
+
+            # stock_quantity önce, stock fallback
+            stok = p.get("stock_quantity") if p.get("stock_quantity") is not None else p.get("stock")
+            if stok is not None:
+                alert = p.get("stock_alert_level") or 5
+                stok_str = f"Stok: {stok} adet"
+                if int(stok) <= int(alert):
+                    stok_str += " (KRİTİK — düşük stok)"
+                metas.append(stok_str)
+
             if p.get("rating") is not None:
                 rc = f" ({p.get('rating_count', 0)} oy)" if p.get("rating_count") else ""
-                metas.append(f"⭐ {p['rating']}/5{rc}")
+                metas.append(f"Rating: {p['rating']}/5{rc}")
             if p.get("weekly_sales") is not None:
                 metas.append(f"Haftalık satış: {p['weekly_sales']}")
             if p.get("status"):
                 metas.append(f"Durum: {p['status']}")
+
             lines.append(f"{head} — " + " | ".join(metas) if metas else head)
 
             desc = (p.get("description") or "").strip()
@@ -98,11 +113,6 @@ def _format_full_context(stores: list[dict], products: list[dict]) -> str:
 
 
 def format_op_context(op_ctx: dict) -> str:
-    """Operasyonel context şu an tüketilmiyor (router boş döndürüyor).
-
-    İmza ai_synthesizer ile uyumlu kalsın diye duruyor; ileride kargo / onay /
-    workflow gibi PG-dışı sinyaller eklendiğinde burada formatlanır.
-    """
     if not op_ctx:
         return ""
     return ""

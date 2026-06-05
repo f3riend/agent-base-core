@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 
 import sqlalchemy as sa
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -48,6 +48,12 @@ class Product(Base):
     ai_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_summary_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     raw_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    stock_quantity: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
+    stock_alert_level: Mapped[int] = mapped_column(Integer, server_default="5", nullable=False)
+    cost_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    sku: Mapped[str | None] = mapped_column(Text, nullable=True)
+    barcode: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=sa.true(), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

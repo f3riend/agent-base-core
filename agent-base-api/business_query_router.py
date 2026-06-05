@@ -1,52 +1,28 @@
 """
 Business query router — saf veri çekici.
 
-Karar verme YOK: keyword listesi, Türkçe stem matching, intent detection,
-ürün skorlaması, "soru hangi türden?" branch'i — hiçbiri yok. Tek görev:
-
-    PG'den o kullanıcının TÜM mağaza + ürün + yorum + SSS verisini al,
-    ham yapıda tek bir payload olarak ai_synthesizer'a teslim et.
-
-Hangi parçanın soruyla ilgili olduğunu LLM seçer; biz seçmeyiz. Kullanıcı
-"magza", "urun", "magzalarımdaki ürün listesini ver" — ne yazarsa yazsın
-Python tarafında dallanma yok, her zaman aynı tam snapshot gider.
-
-Kısa süreli hafıza (son N tur) business_chat → memory.conversation_context
-üzerinden synthesizer'a ayrı kanaldan gider; bu modül onunla ilgilenmez.
+Karar verme YOK. Tek görev: PG'den o kullanıcının TÜM mağaza + ürün + yorum + SSS
+verisini al, ham yapıda tek bir payload olarak ai_synthesizer'a teslim et.
 """
-
 from __future__ import annotations
 
 from typing import Optional
 
-
-# SQLAlchemy mapper'ların eksiksiz initialization'ı için tüm bağımlı modelleri
-# bir kez registry'ye yükle (string-based relationship eval zamanı gerekli).
 try:
     from app.models.store import Store
     from app.models.product import Product
-    from app.models.product_image import ProductImage  # noqa: F401
-    from app.models.product_review import ProductReview  # noqa: F401
-    from app.models.product_faq import ProductFaq  # noqa: F401
+    from app.models.product_image import ProductImage        # noqa: F401
+    from app.models.product_review import ProductReview      # noqa: F401
+    from app.models.product_faq import ProductFaq            # noqa: F401
     from app.models.product_metrics_weekly import ProductMetricsWeekly  # noqa: F401
 except Exception as _model_bootstrap_exc:
     print(f"[ROUTER] model bootstrap import failed: {_model_bootstrap_exc}")
 
-
-# Soru hakkında karar değil — sadece LLM context-window'unu güvende tutmak
-# için ürün başına ham yorum/SSS üst sınırı. Soruya göre değişmez; her zaman
-# en yeni N kayıt iletilir.
 _REVIEWS_PER_PRODUCT_CAP = 25
 _FAQS_PER_PRODUCT_CAP = 15
 
 
 def _pg_full_snapshot(user_id: int) -> dict:
-    """Kullanıcıya ait tüm mağaza + ürün + yorum + SSS'yi tek payload'da döner.
-
-    Karar yok, filtreleme yok: ne PG'de varsa o gelir. Yorum/SSS sayısı
-    sabit bir üst sınırla kesilir (sadece bağlam boyutu güvenliği — soruya
-    bağlı bir tercih değil).
-    """
     try:
         from app.core.database import SessionLocal
         from sqlalchemy import select
@@ -90,20 +66,25 @@ def _pg_full_snapshot(user_id: int) -> dict:
                 faqs_capped = list(p.faqs or [])[:_FAQS_PER_PRODUCT_CAP]
 
                 products.append({
-                    "id":           str(p.id),
-                    "store_id":     str(p.store_id) if p.store_id is not None else None,
-                    "name":         p.name,
-                    "brand":        p.brand,
-                    "category":     p.category,
-                    "price":        float(p.price)    if p.price    is not None else None,
-                    "discount":     float(p.discount) if p.discount is not None else None,
-                    "stock":        p.stock,
-                    "rating":       float(p.rating)   if p.rating   is not None else None,
-                    "rating_count": p.rating_count,
-                    "status":       p.status,
-                    "weekly_sales": p.weekly_sales,
-                    "description":  p.description,
-                    "thumb_url":    (p.images[0].url if p.images else None),
+                    "id":                str(p.id),
+                    "store_id":          str(p.store_id) if p.store_id is not None else None,
+                    "name":              p.name,
+                    "brand":             p.brand,
+                    "category":          p.category,
+                    "sku":               getattr(p, "sku", None),
+                    "price":             float(p.price)       if p.price       is not None else None,
+                    "cost_price":        float(p.cost_price)  if getattr(p, "cost_price", None) is not None else None,
+                    "discount":          float(p.discount)    if p.discount    is not None else None,
+                    "stock":             p.stock,
+                    "stock_quantity":    getattr(p, "stock_quantity", None),
+                    "stock_alert_level": getattr(p, "stock_alert_level", 5),
+                    "is_active":         getattr(p, "is_active", True),
+                    "rating":            float(p.rating)      if p.rating      is not None else None,
+                    "rating_count":      p.rating_count,
+                    "status":            p.status,
+                    "weekly_sales":      p.weekly_sales,
+                    "description":       p.description,
+                    "thumb_url":         (p.images[0].url if p.images else None),
                     "reviews": [{
                         "rating":      int(r.rating) if r.rating is not None else None,
                         "content":     r.content,
@@ -140,11 +121,6 @@ def route(
     active_entity_label: str = "",
     **extra,
 ) -> Optional[dict]:
-    """Soruya bakmadan tüm PG snapshot'ı çek; ai_synthesizer'a teslim et.
-
-    `active_entity_label` ve diğer extra'lar artık kullanılmıyor — imza
-    business_chat ile uyumlu kalsın diye duruyor. Karar LLM'e bırakıldı.
-    """
     question = (question or "").strip()
     if not question:
         return None

@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "006_create_composer_drafts"
-down_revision = "005_create_scheduled_posts"
+down_revision = None
 branch_labels = None
 depends_on = None
 

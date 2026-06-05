@@ -16,6 +16,7 @@ from app.core.database import Base  # noqa: E402
 from app.core.env_settings import env_settings  # noqa: E402
 from app.models import account, content_template, label, password_reset, social_document, usage_event, user  # noqa: F401, E402
 from app.models import store, product, product_image, product_review, product_faq, product_metrics_weekly, system_snapshot, chat_session, chat_message, chat_memory  # noqa: F401, E402
+from app.models import commerce_models  # noqa: F401, E402
 
 config = context.config
 config.set_main_option("sqlalchemy.url", env_settings.DATABASE_URL)
