@@ -20,6 +20,11 @@ dist-ssr
 .env
 agent-base-api/.env
 
+*.db
+*.lock
+*.txt
+*.md
+
 # Host-specific docker overlay — committed canonical version is docker-compose.prod.yml
 docker-compose.override.yml
 

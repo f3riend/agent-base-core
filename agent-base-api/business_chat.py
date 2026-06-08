@@ -756,91 +756,239 @@ def answer_question(
         # query yoluna düş — kullanıcı en azından bilgi cevabı alır.
         print("[CHAT] one_shot returned None, falling back to query path")
 
-    # ----- Resolve follow-up reference -----
-    resolution = memory.resolve_follow_up(question, sid)
-    resolved_q = resolution.resolved_question
-
-    # ----- Retrieval -----
-    # active_entity_label, follow-up çözümlemesinden geliyor — entity-aware
-    # retriever'lar (örn. product_reviews_lookup) sorunun içinde ürün adı
-    # geçmediği durumda bu label'a düşerek doğru ürünü bulur.
+    # ----- Smart retrieval (yeni akış) -----
+    # business_query_router → mention parser → access → cache → intent →
+    # smart_query → format. Asla _pg_full_snapshot çekmez.
     retrieval = query_router.route(
-        resolved_q,
+        question,
         user_id=user_id,
-        active_entity_label=resolution.inherited_entity_label,
+        session_id=sid,
     )
-    used_fallback = retrieval is None
-    if used_fallback:
-        retrieval = _build_open_ended_retrieval(resolved_q, user_id)
+    if retrieval is None:
+        retrieval = {
+            "intent": "general_overview",
+            "routed_intent": "smart_query",
+            "answer": "",
+            "data": {"pg_context": {}, "op_context": {}},
+            "recommendations": [],
+            "confidence": 0.5,
+        }
 
-    # ----- Memory context for the LLM -----
-    mem_ctx = memory.conversation_context(sid)
+    retrieval_data = retrieval.get("data") or {}
 
-    # ----- Synthesize natural prose -----
-    synth = ai_synthesizer.synthesize(
-        question=question,
-        resolved_question=resolved_q,
-        retrieval=retrieval,
-        memory_ctx=mem_ctx,
-        is_followup=resolution.is_followup,
-        inherited_label=resolution.inherited_entity_label,
+    # Rate limit short-circuit — LLM çağrısı yapma, hazır cevabı dön
+    if retrieval_data.get("rate_limited"):
+        return {
+            "question": question,
+            "resolved_question": None,
+            "is_followup": False,
+            "follow_up_rationale": "rate_limited",
+            "session_id": sid,
+            "intent": "rate_limited",
+            "routed_intent": "rate_limited",
+            "active_entity": None,
+            "answer": retrieval.get("answer", "Çok fazla soru gönderiyorsun, biraz bekle."),
+            "stages": ["Rate limit: dakikalık sınır aşıldı."],
+            "data": retrieval_data,
+            "recommendations": [],
+            "confidence": 1.0,
+            "mode": "rate_limited",
+            "model": None,
+            "latency_ms": 0,
+            "sources": ["rate_limiter"],
+            "fallback": False,
+            "anti_repetition_active": False,
+        }
+
+    # ----- API key + model resolution -----
+    api_key = _resolve_api_key(user_id)
+    model = retrieval_data.get("model_override") or ai_synthesizer.CHAT_LLM_MODEL
+
+    # ----- Long-term memory + son session özetleri system prompt'a eklenir -----
+    user_memories = memory.get_user_memories(user_id)
+    past_summaries = memory.get_session_summary(user_id, limit=2)
+
+    full_system_prompt = ai_synthesizer._SYSTEM_PROMPT
+    if user_memories:
+        full_system_prompt += f"\n\nKullanıcı hakkında bilinen notlar:\n{user_memories}"
+    if past_summaries:
+        full_system_prompt += f"\n\nÖnceki konuşmalardan:\n{past_summaries}"
+
+    # DB'den gelen veriyi güçlü etiketle — LLM "veri yok" demesin
+    context_text = ""
+    pg_ctx = retrieval_data.get("pg_context") or {}
+    if pg_ctx.get("type") == "smart_context":
+        raw_text = pg_ctx.get("text") or ""
+        row_count = pg_ctx.get("row_count", 0)
+        if raw_text and row_count > 0:
+            desc = pg_ctx.get("description") or ""
+            context_text = (
+                f"DB VERİSİ ({desc}):\n"
+                f"{raw_text}\n"
+                f"(Toplam {row_count} kayıt — bu sayıları ve değerleri aynen kullan)"
+            )
+        elif row_count == 0:
+            context_text = "(Bu sorgu için veritabanında kayıt bulunamadı.)"
+
+    # Mod tespiti: history'de bu veri zaten var mı?
+    # Yoksa yeni veri (context_text dolu) ya da sohbet modu
+    _mode_label = "MOD_1_SOHBET"
+    if context_text and row_count > 0:
+        _mode_label = "MOD_2_VERI" if row_count <= 10 else "MOD_3_KARMA"
+
+    # ----- OpenAI native chat history -----
+    messages = memory.build_openai_messages(
+        session_id=sid,
+        system_prompt=full_system_prompt,
+        new_question=question,
+        context_data=context_text,
+        limit_turns=10,
     )
 
-    answer_text = synth.answer
+    # ----- LLM çağrısı -----
+    import time as _time
+    _t0 = _time.monotonic()
+    try:
+        answer_text, model_id, tokens = ai_synthesizer.synthesize_with_openai(
+            messages=messages,
+            model=model,
+            api_key=api_key,
+        )
+        if not answer_text:
+            raise RuntimeError("empty completion")
+        synth_mode = "llm"
+        synth_error = None
+    except Exception as exc:
+        print(f"[CHAT] synth failed: {exc}")
+        answer_text = "Şu an cevap üretemedim, biraz sonra tekrar dener misin?"
+        model_id = None
+        tokens = 0
+        synth_mode = "deterministic_fallback"
+        synth_error = str(exc)[:200]
+    latency_ms = int((_time.monotonic() - _t0) * 1000)
 
-    # ----- Record turn -----
-    entity_type, entity_id, entity_label = _entity_from_retrieval(retrieval)
-    # If retrieval didn't bring its own entity but we inherited one, keep that.
-    if not entity_label and resolution.inherited_entity_label:
-        entity_label = resolution.inherited_entity_label
+    cost = _estimate_cost(tokens, model_id or model)
 
     routed_intent = retrieval.get("routed_intent") or retrieval.get("intent")
 
+    # ----- Tur kaydı -----
     memory.record_turn(
         session_id=sid,
         user_id=user_id,
         question=question,
-        resolved_question=resolved_q if resolution.is_followup else None,
-        intent=routed_intent if not used_fallback else "open_ended",
-        routed_intent=routed_intent,
-        primary_entity_type=entity_type,
-        primary_entity_id=entity_id,
-        primary_entity_label=entity_label,
         answer=answer_text,
-        confidence=retrieval.get("confidence"),
+        intent=retrieval.get("intent"),
+        model_used=model_id,
+        tokens_used=tokens,
+        cost_usd=cost,
     )
 
-    sources: list[str] = ["retrieval"] if not used_fallback else [
-        "business_state", "business_intelligence", "cross_event_reasoning",
-    ]
-    if synth.mode == "llm":
-        sources.append("ai_synthesizer")
+    # ----- Long-term memory extract (best effort) -----
+    try:
+        memory.extract_and_save_memories(sid, user_id, question, answer_text, api_key)
+    except Exception as exc:
+        print(f"[CHAT] memory extract failed: {exc}")
+
+    # ----- 20 tur dolduysa session özetle (best effort) -----
+    try:
+        if len(memory.recent_turns(sid, limit=21)) >= 20:
+            memory.summarize_session(sid, api_key=api_key)
+    except Exception as exc:
+        print(f"[CHAT] session summarize failed: {exc}")
+
+    sources = ["smart_query"]
+    if synth_mode == "llm":
+        sources.append("openai_native_history")
     else:
         sources.append("deterministic_fallback")
 
     return {
         "question": question,
-        "resolved_question": resolved_q if resolution.is_followup else None,
-        "is_followup": resolution.is_followup,
-        "follow_up_rationale": resolution.rationale,
+        "resolved_question": None,
+        "is_followup": False,
+        "follow_up_rationale": "native_history",
         "session_id": sid,
-        "intent": routed_intent if not used_fallback else "open_ended",
-        "routed_intent": retrieval.get("routed_intent"),
-        "active_entity": entity_label,
+        "intent": retrieval.get("intent"),
+        "routed_intent": routed_intent,
+        "active_entity": None,
         "answer": answer_text,
-        "stages": synth.stages,
-        "data": retrieval.get("data", {}),
+        "stages": [
+            f"Niyet: {retrieval.get('intent')}",
+            f"Veri satırı: {(retrieval_data.get('pg_context') or {}).get('row_count', 0)}",
+            f"Model: {model_id or model}",
+        ],
+        "data": retrieval_data,
         "recommendations": retrieval.get("recommendations", []),
-        "confidence": retrieval.get("confidence", 0.6),
-        "mode": synth.mode,
-        "model": synth.model,
-        "latency_ms": synth.latency_ms,
+        "confidence": retrieval.get("confidence", 0.9),
+        "mode": synth_mode,
+        "model": model_id,
+        "latency_ms": latency_ms,
+        "tokens_used": tokens,
+        "cost_usd": cost,
         "sources": sources,
-        "fallback": used_fallback,
-        "anti_repetition_active": bool(mem_ctx.get("anti_phrases")),
+        "fallback": synth_mode != "llm",
+        "anti_repetition_active": False,
+        "error": synth_error,
     }
+
+
+def _resolve_api_key(user_id: int) -> str | None:
+    """Per-user OpenAI key resolution.
+
+    Şu an: sadece env var OPENAI_API_KEY.
+    TODO: app_settings tablosu eklendiğinde user_id ile DB lookup ekle.
+    """
+    return os.environ.get("OPENAI_API_KEY")
+
+
+# OpenAI fiyatları (yaklaşık, total_tokens üzerinden ortalama input/output).
+# Kesin değil ama kabaca maliyet takibine yeter.
+_COST_RATES = {
+    "gpt-4o-mini": 0.000_000_3,   # ~$0.30 per 1M tokens (input+output karması)
+    "gpt-4o": 0.000_005,           # ~$5 per 1M tokens
+}
+
+
+def _estimate_cost(tokens: int, model: str | None) -> float:
+    if not tokens or not model:
+        return 0.0
+    rate = _COST_RATES.get(model)
+    if rate is None:
+        # gpt-4o-mini-2024-... gibi versiyonlu isimleri yakala
+        for k, v in _COST_RATES.items():
+            if model.startswith(k):
+                rate = v
+                break
+    rate = rate or 0.000_000_3
+    return round(int(tokens) * rate, 6)
 
 
 def supported_query_intents() -> list[str]:
     """Exposed to /api/internal/chat/intents for the dashboard help tooltip."""
     return query_router.list_supported_intents()
+
+
+def _resolve_api_key(user_id: int) -> str | None:
+    """Per-user OpenAI key resolution.
+    Şu an: sadece env var. TODO: app_settings DB lookup.
+    """
+    return os.environ.get("OPENAI_API_KEY")
+
+
+_COST_RATES = {
+    "gpt-4o-mini": 0.000_000_3,
+    "gpt-4o": 0.000_005,
+}
+
+
+def _estimate_cost(tokens: int, model: str | None) -> float:
+    if not tokens or not model:
+        return 0.0
+    rate = _COST_RATES.get(model)
+    if rate is None:
+        for k, v in _COST_RATES.items():
+            if model.startswith(k):
+                rate = v
+                break
+    rate = rate or 0.000_000_3
+    return round(int(tokens) * rate, 6)

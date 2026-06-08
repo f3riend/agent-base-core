@@ -1,117 +1,14 @@
 """
-Business query router — saf veri çekici.
+Business query router — nl_to_sql tabanlı dinamik sorgu sistemi.
 
-Karar verme YOK. Tek görev: PG'den o kullanıcının TÜM mağaza + ürün + yorum + SSS
-verisini al, ham yapıda tek bir payload olarak ai_synthesizer'a teslim et.
+Akış: mention → rate-limit → access → cache → nl_to_sql → cache yaz → döndür
+Güvenlik: nl_to_sql sadece SELECT geçirir, UUID cast garantili.
 """
 from __future__ import annotations
 
+import hashlib
+import os
 from typing import Optional
-
-try:
-    from app.models.store import Store
-    from app.models.product import Product
-    from app.models.product_image import ProductImage        # noqa: F401
-    from app.models.product_review import ProductReview      # noqa: F401
-    from app.models.product_faq import ProductFaq            # noqa: F401
-    from app.models.product_metrics_weekly import ProductMetricsWeekly  # noqa: F401
-except Exception as _model_bootstrap_exc:
-    print(f"[ROUTER] model bootstrap import failed: {_model_bootstrap_exc}")
-
-_REVIEWS_PER_PRODUCT_CAP = 25
-_FAQS_PER_PRODUCT_CAP = 15
-
-
-def _pg_full_snapshot(user_id: int) -> dict:
-    try:
-        from app.core.database import SessionLocal
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-
-        with SessionLocal() as session:
-            store_rows = list(session.scalars(
-                select(Store)
-                .where(Store.user_id == int(user_id))
-                .order_by(Store.id.desc())
-            ).all())
-
-            stores = [{
-                "id":         str(s.id),
-                "name":       s.name,
-                "rating":     float(s.rating) if s.rating is not None else None,
-                "logo_url":   getattr(s, "logo_url", None),
-                "banner_url": getattr(s, "banner_url", None),
-                "status":     getattr(s, "status", None),
-            } for s in store_rows]
-
-            product_rows = list(session.scalars(
-                select(Product)
-                .join(Store, Product.store_id == Store.id)
-                .where(Store.user_id == int(user_id))
-                .order_by(Product.created_at.desc())
-                .options(
-                    selectinload(Product.reviews),
-                    selectinload(Product.faqs),
-                    selectinload(Product.images),
-                )
-            ).all())
-
-            products: list[dict] = []
-            for p in product_rows:
-                reviews_sorted = sorted(
-                    list(p.reviews or []),
-                    key=lambda r: (r.review_date or "", getattr(r, "id", 0)),
-                    reverse=True,
-                )[:_REVIEWS_PER_PRODUCT_CAP]
-                faqs_capped = list(p.faqs or [])[:_FAQS_PER_PRODUCT_CAP]
-
-                products.append({
-                    "id":                str(p.id),
-                    "store_id":          str(p.store_id) if p.store_id is not None else None,
-                    "name":              p.name,
-                    "brand":             p.brand,
-                    "category":          p.category,
-                    "sku":               getattr(p, "sku", None),
-                    "price":             float(p.price)       if p.price       is not None else None,
-                    "cost_price":        float(p.cost_price)  if getattr(p, "cost_price", None) is not None else None,
-                    "discount":          float(p.discount)    if p.discount    is not None else None,
-                    "stock":             p.stock,
-                    "stock_quantity":    getattr(p, "stock_quantity", None),
-                    "stock_alert_level": getattr(p, "stock_alert_level", 5),
-                    "is_active":         getattr(p, "is_active", True),
-                    "rating":            float(p.rating)      if p.rating      is not None else None,
-                    "rating_count":      p.rating_count,
-                    "status":            p.status,
-                    "weekly_sales":      p.weekly_sales,
-                    "description":       p.description,
-                    "thumb_url":         (p.images[0].url if p.images else None),
-                    "reviews": [{
-                        "rating":      int(r.rating) if r.rating is not None else None,
-                        "content":     r.content,
-                        "review_date": r.review_date,
-                    } for r in reviews_sorted],
-                    "faqs": [{
-                        "question": f.question,
-                        "answer":   f.answer,
-                    } for f in faqs_capped],
-                })
-
-            return {
-                "type":          "full_context",
-                "stores":        stores,
-                "store_count":   len(stores),
-                "products":      products,
-                "product_count": len(products),
-            }
-    except Exception as exc:
-        print(f"[ROUTER] _pg_full_snapshot error: {exc}")
-        return {
-            "type":          "full_context",
-            "stores":        [],
-            "store_count":   0,
-            "products":      [],
-            "product_count": 0,
-        }
 
 
 def route(
@@ -119,26 +16,108 @@ def route(
     *,
     user_id: int = 1,
     active_entity_label: str = "",
+    session_id: str | None = None,
     **extra,
 ) -> Optional[dict]:
     question = (question or "").strip()
     if not question:
         return None
 
-    pg_ctx = _pg_full_snapshot(user_id)
+    from app.services.mention_parser import parse_mention
+    from app.services.access_control import is_admin_user, resolve_scope_to_store_ids
+    from app.services.chat_cache import get_cached, set_cache
+    from app.services.rate_limiter import check_rate_limit
+    from app.services.nl_to_sql import nl_to_sql
+
+    is_admin = is_admin_user(user_id)
+    api_key = os.environ.get("OPENAI_API_KEY")
+
+    # 1) Rate limit
+    allowed, _remaining = check_rate_limit(user_id, is_admin)
+    if not allowed:
+        return {
+            "intent": "rate_limited",
+            "routed_intent": "rate_limited",
+            "answer": "Çok fazla soru gönderiyorsun, biraz bekle.",
+            "data": {"pg_context": {}, "op_context": {}, "rate_limited": True},
+            "recommendations": [],
+            "confidence": 1.0,
+        }
+
+    # 2) @mention parse
+    mention = parse_mention(question)
+    clean_q = mention.clean_query or question
+
+    # 3) Erişim kontrolü
+    store_ids = resolve_scope_to_store_ids(mention, user_id, is_admin)
+
+    # 4) Cache kontrolü — soru + store_ids birlikte hash
+    scope_hash = hashlib.md5(
+        f"{'-'.join(sorted(store_ids))}:{clean_q}".encode()
+    ).hexdigest()[:12]
+
+    cached = get_cached(user_id, "nl_query", scope_hash)
+    if cached:
+        return {
+            "intent": "nl_query",
+            "routed_intent": "smart_query",
+            "answer": "",
+            "data": {
+                "pg_context": {
+                    "type": "smart_context",
+                    "text": cached,
+                    "row_count": 1,  # cache'deyse daha önce row_count>0'dı
+                    "description": "cache",
+                },
+                "op_context": {},
+                "from_cache": True,
+                "model_override": "gpt-4o-mini",
+            },
+            "recommendations": [],
+            "confidence": 0.95,
+        }
+
+    # 5) NL → SQL → Çalıştır
+    result = nl_to_sql(
+        question=clean_q,
+        store_ids=store_ids,
+        user_id=user_id,
+        api_key=api_key,
+        is_admin=is_admin,
+    )
+
+    formatted = result.get("formatted") or ""
+    row_count = result.get("row_count", 0)
+    model_tier = result.get("model_tier") or "mini"
+    model = "gpt-4o" if (model_tier == "full" or is_admin) else "gpt-4o-mini"
+
+    # 6) Cache'e yaz — sadece veri geldiyse
+    if formatted and not result.get("error") and row_count > 0:
+        set_cache(user_id, "nl_query", scope_hash, formatted, row_count=row_count)
 
     return {
-        "intent":        "smart_query",
+        "intent": "nl_query",
         "routed_intent": "smart_query",
-        "answer":        "",
+        "answer": "",
         "data": {
-            "pg_context": pg_ctx,
+            "pg_context": {
+                "type": "smart_context",
+                "text": formatted,
+                "sql": result.get("sql", ""),
+                "description": result.get("description", ""),
+                "row_count": row_count,
+                "error": result.get("error"),
+            },
             "op_context": {},
+            "model_override": model,
+            "from_cache": False,
+            "mention_scope": mention.scope,
+            "store_ids": store_ids,
         },
         "recommendations": [],
-        "confidence":      0.9,
+        "confidence": 0.9,
     }
 
 
 def list_supported_intents() -> list[str]:
-    return ["smart_query"]
+    return ["nl_query"]

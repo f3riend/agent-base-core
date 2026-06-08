@@ -70,280 +70,53 @@ except ImportError:
 # NOT canned responses — they're "what the AI is looking at right now"
 # lines that appear during the brief retrieval window.
 
-_STAGE_POOLS: dict[str, list[str]] = {
-    "top_stock_product": [
-        "Stok kayıtlarına bakıyorum…",
-        "En yüksek stoğu olan ürünü çıkarıyorum…",
-        "Stok dağılımını tarıyorum…",
-    ],
-    "low_stock_products": [
-        "Düşük stoklu ürünleri tarıyorum…",
-        "Stok eşiklerini gözden geçiriyorum…",
-        "Stoğu eriyen kalemleri çıkarıyorum…",
-    ],
-    "top_selling_product": [
-        "Son satış hareketlerine bakıyorum…",
-        "Satış sıralamasını kontrol ediyorum…",
-        "Hangi ürün öne çıkmış, ona bakıyorum…",
-    ],
-    "top_n_selling": [
-        "Top satış listesini çıkarıyorum…",
-        "Ürünleri satışa göre sıralıyorum…",
-    ],
-    "sales_drop_diagnosis": [
-        "Satış düşüşünün izini sürüyorum…",
-        "Yorum, kargo ve satış sinyallerini karşılaştırıyorum…",
-        "Geçen birkaç güne ait olayları inceliyorum…",
-    ],
-    "sales_overview": [
-        "Toplam satış tablosuna bakıyorum…",
-        "Satış hacmini ve top ürünleri toparlıyorum…",
-    ],
-    "sentiment_status": [
-        "Yorum trendlerini inceliyorum…",
-        "Müşteri duyarlılığını ölçüyorum…",
-        "Olumlu / olumsuz yorum oranlarını çıkarıyorum…",
-    ],
-    "workflows_summary": [
-        "Aktif iş akışlarına bakıyorum…",
-        "Hangi otomasyonlar çalışıyor, listeliyorum…",
-    ],
-    "approval_bottlenecks": [
-        "Onay kuyruğunu kontrol ediyorum…",
-        "Bekleyen AI önerilerini topluyorum…",
-    ],
-    "campaigns_performance": [
-        "Kampanya sonuçlarını karşılaştırıyorum…",
-        "Onaylanan ve reddedilen kampanyaları sayıyorum…",
-    ],
-    "shipping_health": [
-        "Kargo / teslimat durumuna bakıyorum…",
-        "Gecikme oranını hesaplıyorum…",
-    ],
-    "memory_patterns": [
-        "Hafızadaki örüntülere bakıyorum…",
-        "Hangi aksiyonlar genelde işe yarıyor, çıkarıyorum…",
-    ],
-    "operational_pressure": [
-        "Genel operasyon baskısını ölçüyorum…",
-        "Satış, kargo ve duyarlılığı bir araya getiriyorum…",
-    ],
-}
+_SYSTEM_PROMPT = """Sen Türkçe konuşan, bir e-ticaret mağazasının iş danışmanısın. Mağaza sahibiyle sohbet ediyorsun — veriye hâkimsin, işin ehlisin, sade ve anlaşılır konuşursun.
 
-_GENERIC_OPENERS = [
-    "Bu soruyu anlamaya çalışıyorum…",
-    "Bağlamı topluyorum…",
-    "İlgili verilere bakıyorum…",
-]
+1) VERİ BLOĞU — MUTLAK KAYNAK:
+- Mesajında "DB VERİSİ:" veya "VERİ:" ile başlayan bir blok varsa bu veri az önce
+  PostgreSQL'den çekildi. Gerçek kayıt. Aynen kullan.
+- Bu bloktaki sayıları, isimleri, rating'leri ASLA değiştirme, yuvarlama, tahmin etme.
+- "DB VERİSİ:" bloğu varsa "bu konuda veri yok" deme — veri orada, onu kullan.
+- Blok yoksa veya boşsa "bu konuda elimde kayıt yok" de.
 
-_GENERIC_CLOSERS = [
-    "Sonuçları derliyorum…",
-    "Bulguları bir araya getiriyorum…",
-    "Açıklamayı şekillendiriyorum…",
-]
+2) MOD BAZLI DAVRANIŞ:
+- MOD 1 (sohbet): Önceki konuşmada veri varsa ondan devam et, DB'ye gitme.
+- MOD 2 (veri): Tek sorgu sonucu var, direkt cevapla.
+- MOD 3 (karma): Birden fazla ürün/kategori var. Her biri için AYRI paragraf yaz.
+  Örnek: "Razer Mouse: Müşteriler hafifliğini övüyor ancak büyük eller için küçük
+  bulduklarını belirtmişler. Aula Klavye: Tuş hassasiyeti ve ses kalitesi öne çıkıyor."
 
+3) SAYILAR — DEĞİŞTİRME:
+- DB VERİSİ bloğunda rating 4.70 yazıyorsa sen de 4.7 de — 4.8 veya 5 deme.
+- Fiyat, stok, kar — DB'den gelen sayı ne ise o.
+- Yorum rating'lerinden kendi ortalamanı hesaplama.
 
-def _data_aware_first_stage(intent: str | None, data: dict | None) -> str | None:
-    """If retrieval surfaced a concrete entity/metric, NAME it in the first stage.
+4) SORUYU DİREKT CEVAPLA:
+- "En pahalı hangisi?" → sadece o ürünü söyle, diğerini listeleme.
+- "Peki ya diğeri?" → önceki konuşmada bahsedilen ürünün dışındakini anlat.
+- "3 mağazan var, 2 ürünün var" tekrarı yapma — kullanıcı biliyor.
 
-    This is the single biggest perception change: instead of "Stok kayıtlarına
-    bakıyorum…" the operator sees "Stok taradım — Logitech G Pro X 130 adetle
-    önde." It sounds like the AI is REPORTING what it just saw, not narrating
-    from a generic pool.
-    """
-    data = data or {}
-    item = data.get("item") if isinstance(data.get("item"), dict) else None
-    items = data.get("items") if isinstance(data.get("items"), list) else []
+5) ÜSLUP:
+- Samimi, akıcı Türkçe. Ancak, lakin, ama, yani bağlaçlarını kullan.
+- Önce genel değerlendirme, sonra detay.
+- Rakamları karşılaştırmalı anlat. Çelişki varsa söyle.
+- Öneri varsa gerekçesiyle ver, somut sayıyla.
+- Jargon yok: KPI, funnel, engagement, sinerji.
+- Kalıp yok: "Elbette", "tabii ki", "umarım yardımcı olur".
 
-    if intent == "top_stock_product" and item:
-        return f"Stok kayıtlarını taradım — **{item.get('name','—')}** {item.get('stock','?')} adetle önde."
-    if intent == "low_stock_products" and items:
-        first = items[0] if items else {}
-        return f"Düşük stoklu {len(items)} ürün öne çıktı — en kritik: **{first.get('name','—')}** ({first.get('stock','?')})."
-    if intent == "top_selling_product" and item:
-        return f"Satış sıralamasını çıkardım — **{item.get('name','—')}** {item.get('sales','?')} adetle önde."
-    if intent == "top_n_selling" and items:
-        return f"Top {len(items)} satış kalemini çıkardım."
-    if intent == "sales_drop_diagnosis":
-        causes = data.get("causes") or []
-        if causes:
-            return f"Olası {len(causes)} sebebi karşılaştırdım: {', '.join(causes[:3])}."
-    if intent == "sales_overview":
-        total = data.get("total_sales")
-        if total is not None:
-            return f"Toplam satışı topladım — {total} adet."
-    if intent == "sentiment_status":
-        counts = data.get("counts") or {}
-        if counts:
-            neg = counts.get("negative", 0)
-            tot = sum(counts.values()) or 1
-            return f"Yorum dağılımını çıkardım — {neg}/{tot} olumsuz."
-    if intent == "shipping_health":
-        d = data.get("delayed")
-        t = data.get("total")
-        if d is not None and t is not None:
-            return f"Kargo durumunu çıkardım — {d}/{t} siparişte gecikme."
-    if intent == "workflows_summary":
-        ac = data.get("active_count")
-        if ac is not None:
-            return f"Aktif iş akışlarını saydım — {ac} tane çalışıyor."
-    if intent == "approval_bottlenecks":
-        pending = data.get("pending") or []
-        return f"Onay kuyruğuna baktım — {len(pending)} bekleyen kayıt."
-    if intent == "campaigns_performance":
-        camps = data.get("campaigns") or []
-        return f"Son {len(camps)} kampanya sonucunu karşılaştırdım."
-    if intent == "memory_patterns":
-        pats = data.get("patterns") or []
-        return f"Hafızadaki {len(pats)} örüntüye baktım."
-    if intent == "operational_pressure":
-        lvl = data.get("pressure_level")
-        if lvl:
-            return f"Operasyonel baskıyı ölçtüm — {lvl}."
-    return None
+6) MARKDOWN YASAK:
+- **bold** yok, *italic* yok, başlık (#) yok, madde işareti (- *) yok.
+- Düz metin. Vurguyu cümle yapısıyla yap.
 
+7) META SORULAR:
+- "Sana güvenebilir miyim?" → Sadece DB'den gelen veriyi söylediğini, uydurmadığını açıkla.
+- "Bana yalan söylüyor musun?" → Hayır, DB verisi ne diyorsa onu söylüyorum, de.
 
-def _retrieval_qualifier_stage(intent: str | None, data: dict | None) -> str | None:
-    """Optional 2nd stage line: a qualifier that adds depth — e.g.
-    'Geçmiş yorumlarla karşılaştırıyorum…' for sentiment, etc.
-    """
-    data = data or {}
-    if intent == "sales_drop_diagnosis":
-        sigs = data.get("signals") or {}
-        nonzero = [k for k, v in sigs.items() if v]
-        if nonzero:
-            return f"Sinyalleri eşliyorum — {', '.join(nonzero[:3])}."
-    if intent == "sentiment_status" and data.get("tone"):
-        return f"Genel duygu tonu: {data['tone']} olarak okuyorum."
-    if intent == "operational_pressure":
-        notes = data.get("notes") or []
-        if notes:
-            return f"Öne çıkan baskı kaynakları: {', '.join(notes[:3])}."
-    if intent == "top_selling_product":
-        item = data.get("item") if isinstance(data.get("item"), dict) else {}
-        if (item.get("stock") or 0) < 10:
-            return f"Stok seviyesi {item.get('stock')} — tükenme yakın."
-    if intent == "top_stock_product":
-        item = data.get("item") if isinstance(data.get("item"), dict) else {}
-        sales = item.get("sales") or 0
-        if sales <= 5:
-            return f"Satış hareketi {sales} — ivme zayıf."
-    return None
-
-
-def compose_stages(
-    *,
-    intent: str | None,
-    retrieval_data: dict | None,
-    is_followup: bool = False,
-    inherited_label: str | None = None,
-    rng: random.Random | None = None,
-) -> list[str]:
-    """Return 2–3 deliberation lines.
-
-    Strategy:
-        - If we can extract a concrete entity/metric from the retrieval,
-          the first stage REPORTS what was found (not what is being looked
-          up). This is what makes the deliberation feel alive.
-        - If we can't (or for follow-ups), fall back to a generic pool so
-          the panel still shows movement.
-    """
-    rng = rng or random.Random()
-    stages: list[str] = []
-
-    if is_followup and inherited_label:
-        stages.append(f"Bağlamı koruyorum — {inherited_label} üzerinden devam ediyorum…")
-
-    primary = _data_aware_first_stage(intent, retrieval_data)
-    if primary:
-        stages.append(primary)
-    else:
-        pool = _STAGE_POOLS.get(intent or "") or _GENERIC_OPENERS
-        stages.append(rng.choice(pool))
-
-    qualifier = _retrieval_qualifier_stage(intent, retrieval_data)
-    if qualifier:
-        stages.append(qualifier)
-
-    if len(stages) < 3:
-        stages.append(rng.choice(_GENERIC_CLOSERS))
-
-    # de-duplicate while preserving order
-    seen, out = set(), []
-    for s in stages:
-        if s not in seen:
-            seen.add(s)
-            out.append(s)
-    return out[:4]
-
-
-# ---------------------------------------------------------------------------
-# Prompt assembly
-# ---------------------------------------------------------------------------
-
-
-_SYSTEM_PROMPT = """Sen Türkçe konuşan, bir e-ticaret mağazasının iş danışmanısın. Mağaza sahibiyle sohbet ediyorsun — veriye hâkimsin, işin ehlisin, lakin sade ve anlaşılır konuşursun.
-
-1) VERİ TEK KAYNAK — DATA NE DİYORSA O:
-- Cevabın tamamen sana verilen `data` alanından çıkar. Orada olmayan hiçbir şeyi söyleme.
-- Bir mağazada ürün olup olmadığını söylemek için o mağazaya ait ürün kaydı data'da geçiyor olmalı. Geçmiyorsa "bu mağazada ürün yok" de — başka mağazaları karıştırma.
-- `data` ilgili konuda boşsa açıkça "bu konuda elimde veri yok" de. Uydurma, tahmin etme.
-- Bilmediğini söylemek, uydurmaktan her zaman daha iyidir.
-
-2) SAYILAR — SANA NE GELDİYSE O KADAR:
-- Sana kaç mağaza geliyorsa AYNEN o kadar. Listedeki uzunluğu sen say, başka rakam üretme.
-- Aynı şey ürünler, yorumlar, siparişler için geçerli.
-- Aynı oturumda tutarsız sayı söyleme.
-
-3) SORUYU DİREKT CEVAPLA:
-- Kullanıcı ne sorduysa onu cevapla. Sormadığı şeyleri anlatma.
-- "3 mağazan var, 2 ürünün var" gibi tekrarları her cevapta yapma — kullanıcı bunu zaten biliyor.
-- Genel soru = tüm veriyi kapsayan özet. Spesifik soru = direkt o konunun cevabı.
-
-4) ÜSLUP — DOĞAL, AKICI, İŞİN EHLİ:
-- Samimi, sade, akıcı Türkçe. Ancak, lakin, ama, yani, üstelik, oysa, bununla birlikte gibi bağlaçları doğal akışta kullan.
-- Kısa ve net cevaplar. Gereksiz giriş yok, kapanış kalıbı yok.
-- Rakamları ve ürün isimlerini cümle içine yedir — madde işareti veya liste yapma.
-- Jargon YOK: "operasyonel", "sinerji", "optimize", "KPI", "funnel", "engagement", "satış potansiyeli" geçmez.
-- Kalıp YOK: "Elbette", "tabii ki", "harika", "umarım yardımcı olur", "İstersen şunu yapabilirim", "oldukça iyi", "dikkat çekiyor" gibi kalıplar kullanma.
-
-5) KONUŞMA TARZI:
-- Önce genel bir değerlendirme yap, sonra detaya in. Örnek: "Genel olarak ikisi de iyi durumda, ancak aralarında fark var."
-- Rakamları karşılaştırmalı anlat. "Razer'da marj %35, Aula'da %32" — tek tek sıralama değil, karşılaştırma.
-- Çelişki veya nüans varsa onu da söyle. Örnek: "Birim karda Aula önde ama marj oranında Razer daha iyi — ikisi farklı şey söylüyor."
-- Önerin varsa gerekçesiyle ver. "Razer'ı öneririm çünkü rating'i daha yüksek ve yorumları daha temiz."
-- Veri eksikse dürüstçe söyle. "Haftalık satış verisi olmadan kesin bir şey söylemek zor."
-
-6) META SORULAR — KENDİN HAKKINDA SORULAR:
-- "Sana güvenebilir miyim?" → Sadece veri ne diyorsa onu söylediğini, veri yoksa icat etmediğini kısaca açıkla.
-- "Bana yalan söylüyor musun?" → Hayır, sadece verilen data'ya göre konuştuğunu söyle. Savunmaya geçme, kısa tut.
-- "Nasılsın?", "Sen kimsin?" gibi sorular → Kısaca kim olduğunu söyle, hemen konuya dön.
-
-7) MARKDOWN YASAK:
-- **bold** kullanma. *italic* kullanma. Başlık (#) kullanma. Madde işareti (- veya *) kullanma.
-- Düz metin yaz. Vurgulamak istediğin şeyi cümle yapısıyla vurgula, işaretle değil.
-
-8) KAR MARJI VE FİYAT ANALİZİ:
-- Ürünün fiyatı ve maliyet fiyatı verilmişse kar ve marjı hesapla: kar = fiyat - maliyet, marj = kar/fiyat * 100.
-- Hem marj oranını hem birim karı karşılaştır — ikisi farklı şey söylüyor olabilir, bunu kullanıcıya anlat.
-- İndirim önerisi yaparken somut yeni fiyatı söyle. "Aula'ya %10 indirim yapsan 2780 TL'ye iner."
-
-9) ÖNERİ VER — SOMUT VE VERİYE DAYALI:
-- Somut sayı ve ürün adıyla öneri yap, gerekçesiyle birlikte ver.
-- Genel tavsiye verme: "Kampanya başlatabilirsin", "Sosyal medyada paylaş", "Pazarlama stratejini güçlendirebilirsin" yasak.
-- Veri yoksa öneri yapma.
-
-10) KULLANICI YORUMLARINI AKTARIRKEN:
-- Türkçe yazım hatalarını sessizce düzelt, anlam ve tonu koru.
-- Özetleme, kısaltma yapma — sadece imlayı toparla.
-
-11) GENEL SORULARDA BAĞLAM MİRASI YASAK:
-- Genel soru geldiğinde önceki turda konuşulan tek ürüne yapışma, tüm veriyi tara.
-- Önceki bağlamı sadece kullanıcı açıkça o konuyu kastediyorsa taşı.
+8) VERİ YOKSA:
+- "Bu konuda elimde kayıt yok" de. Tahmin etme, uydurma.
 
 FORBIDDEN_PHRASES listesindeki ifadeleri ASLA kullanma.
-
-Çıktı: SADECE düz Türkçe metin. Markdown yok, bold yok, başlık yok, madde işareti yok."""
+Çıktı: SADECE düz Türkçe metin."""
 
 
 # Phrases the synthesizer must avoid. Seeded from the codebase's known canned
@@ -374,26 +147,10 @@ _FORBIDDEN_PHRASES: tuple[str, ...] = (
     "bu özellikleri öne çıkararak",
     "bu da alıcıları çekmek için",
     "bu da talebi artırabilir",
+    "genel olarak iyi",
+    "oldukça",
+    "bu konuda elimde veri yok" ,
 )
-
-
-# Map intent codes → operator-language *context* (NOT prescriptive phrasing).
-# This describes what the intent IS, so the LLM can decide whether and how to
-# weave it into prose. Compared to the old _INTENT_SUGGESTIONS, these are
-# descriptors, not finished sentences the LLM might echo verbatim.
-_INTENT_CONTEXT: dict[str, str] = {
-    "discount_promotion":   "fiyat / indirim odaklı bir aksiyon türü",
-    "growth_marketing":     "büyüme / görünürlük aksiyonu (sosyal medya, banner)",
-    "marketing_campaign":   "genel pazarlama kampanyası",
-    "reputation":           "itibar onarımı (açıklama, destek, telafi)",
-    "shipping_response":    "müşteriye kargo bilgilendirmesi",
-    "customer_support":     "doğrudan müşteri destek yanıtı",
-    "inventory_review":     "stok analizi / yenileme tetiği",
-    "insights":             "iç analiz (trend, sebep, performans)",
-    "low_stock_alert":      "düşük stok uyarısı (kritik)",
-    "store_welcome":        "yeni mağaza karşılama akışı",
-    "general_marketing":    "spesifik olmayan pazarlama dokunuşu",
-}
 
 
 def compose_prompt(
@@ -470,7 +227,9 @@ def compose_prompt(
 
     # PG ve operasyonel blokları sadece doluysa ekle
     pg_section = (
-        f"ÜRÜN / MAĞAZA VERİSİ (PostgreSQL — gerçek kayıtlar):\n{pg_block}\n\n"
+        f"ÜRÜN / MAĞAZA VERİSİ (PostgreSQL — gerçek kayıtlar, DEĞİŞTİRME):\n"
+        f"ÖNEMLİ: Bu bloktaki rating, fiyat, stok sayılarını AYNEN kullan.\n"
+        f"{pg_block}\n\n"
         if pg_block else ""
     )
     op_section = (
@@ -524,20 +283,32 @@ def _has_openai_key() -> bool:
     return bool(os.environ.get("OPENAI_API_KEY"))
 
 
-def synthesize_with_openai(messages: list[dict]) -> tuple[str, str | None]:
-    """Returns (answer_text, model_id). Raises on any failure."""
+def synthesize_with_openai(
+    messages: list[dict],
+    model: str | None = None,
+    api_key: str | None = None,
+) -> tuple[str, str | None, int]:
+    """Returns (answer_text, model_id, total_tokens). Raises on any failure.
+
+    Geriye dönük uyumluluk: eski çağrılar (sadece messages) çalışmaya devam eder.
+    Yeni çağrılar `model` ve `api_key` parametrelerini override edebilir.
+    """
     from openai import OpenAI
 
-    client = OpenAI(timeout=CHAT_LLM_TIMEOUT)
+    client = OpenAI(
+        api_key=api_key or os.environ.get("OPENAI_API_KEY"),
+        timeout=CHAT_LLM_TIMEOUT,
+    )
     completion = client.chat.completions.create(
-        model=CHAT_LLM_MODEL,
+        model=model or CHAT_LLM_MODEL,
         messages=messages,
         temperature=CHAT_LLM_TEMPERATURE,
         max_tokens=CHAT_LLM_MAX_TOKENS,
     )
     msg = completion.choices[0].message
     text = (msg.content or "").strip()
-    return text, completion.model
+    tokens = completion.usage.total_tokens if completion.usage else 0
+    return text, completion.model, int(tokens)
 
 
 # ---------------------------------------------------------------------------
@@ -563,14 +334,7 @@ def synthesize(
     """Run the synthesis pipeline. Always returns a SynthesisResult."""
     started = time.monotonic()
 
-    rng = random.Random(rng_seed) if rng_seed is not None else None
-    stages = compose_stages(
-        intent=retrieval.get("routed_intent") or retrieval.get("intent"),
-        retrieval_data=retrieval.get("data"),
-        is_followup=is_followup,
-        inherited_label=inherited_label,
-        rng=rng,
-    )
+    stages = []
 
     if not CHAT_USE_LLM or not _has_openai_key():
         return SynthesisResult(
@@ -590,7 +354,7 @@ def synthesize(
     )
 
     try:
-        text, model_id = synthesize_with_openai(messages)
+        text, model_id, _tokens = synthesize_with_openai(messages)
         if not text:
             raise RuntimeError("empty completion")
         return SynthesisResult(

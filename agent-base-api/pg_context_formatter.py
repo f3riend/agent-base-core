@@ -7,7 +7,10 @@ from __future__ import annotations
 def format_pg_context(pg_ctx: dict) -> str:
     if not pg_ctx:
         return ""
-    if pg_ctx.get("type") == "full_context":
+    ctx_type = pg_ctx.get("type")
+    if ctx_type == "smart_context":
+        return pg_ctx.get("text") or ""
+    if ctx_type == "full_context":
         return _format_full_context(
             pg_ctx.get("stores", []),
             pg_ctx.get("products", []),
