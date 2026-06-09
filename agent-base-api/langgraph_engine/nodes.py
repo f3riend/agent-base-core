@@ -428,11 +428,45 @@ def _ai_generate_caption(
                     if v not in (None, "", []) and k not in context:
                         context[f"{nested_key}_{k}"] = v
 
-        # 3) Bağlam metni — okunaklı liste formatı
+        # 3) Kampanya bilgileri ekle
+        discount_pct = event_payload.get("discount_pct") or event_payload.get("discount_percent") or 0
+        campaign_price = event_payload.get("campaign_price")
+        campaign_start = event_payload.get("campaign_start")
+        campaign_end = event_payload.get("campaign_end")
+        reviews = event_payload.get("reviews_positive") or []
+        rating = event_payload.get("rating")
+        rating_count = event_payload.get("rating_count")
+        stok = event_payload.get("stok")
+        bu_ay_satis = event_payload.get("bu_ay_satis")
+
+        if discount_pct:
+            context["indirim_orani"] = f"%{int(discount_pct)}"
+        if campaign_price:
+            context["kampanya_fiyati"] = f"{campaign_price} TL"
+        if campaign_start:
+            context["kampanya_baslangic"] = campaign_start
+        if campaign_end:
+            context["kampanya_bitis"] = campaign_end
+        if rating:
+            oy = f" ({rating_count} oy)" if rating_count else ""
+            context["urun_puani"] = f"{rating}/5{oy}"
+        if stok is not None:
+            context["stok_durumu"] = f"{stok} adet"
+        if bu_ay_satis is not None:
+            context["bu_ay_satis"] = f"{bu_ay_satis} adet"
+
+        # Bağlam metni — okunaklı liste formatı
         if context:
             ctx_str = "\n".join(f"- {k}: {v}" for k, v in context.items())
         else:
             ctx_str = "Yeni içerik"
+
+        # Müşteri yorumları
+        reviews_str = ""
+        if reviews:
+            reviews_str = "\n\nMÜŞTERİ GÖRÜŞLERİ (caption'da kullan):\n" + "\n".join(
+                f"• {str(r)[:100]}" for r in reviews[:3]
+            )
 
         # 4) Şablon talimatı (prompt önceliği)
         template_instruction = ""
@@ -461,16 +495,31 @@ def _ai_generate_caption(
             "bilgilerini ve şablon talimatlarını kullanarak platforma uygun, "
             "etkileyici, kısa ve öz içerik üretirsin."
         )
+        # Kampanya özeti varsa vurgula
+        kampanya_ozet = ""
+        if discount_pct and campaign_price:
+            orig_price = context.get("price", "")
+            kampanya_ozet = (
+                f"\n\nKAMPANYA BİLGİSİ: %{int(discount_pct)} indirim — "
+                f"normal fiyat {orig_price} TL, kampanya fiyatı {campaign_price} TL"
+            )
+            if campaign_start and campaign_end:
+                kampanya_ozet += f" ({campaign_start} - {campaign_end})"
+
         user_msg = (
             f"{channel_name} için sosyal medya paylaşım metni yaz.\n"
             f"Kural: {rule_name}\n\n"
-            f"ÜRÜN/MAĞAZA BİLGİLERİ:\n{ctx_str}\n"
+            f"ÜRÜN/MAĞAZA BİLGİLERİ:\n{ctx_str}"
+            f"{kampanya_ozet}"
+            f"{reviews_str}\n"
             + (f"\nŞABLON TALİMATI:\n{template_instruction}\n" if template_instruction else "")
             + "\nKURALLAR:\n"
             "- ZORUNLU: Tüm metin Türkçe olmalı. İngilizce kelime kullanma.\n"
             "  (Marka/ürün adı haricinde; örn. 'Razer Cobra' kalabilir ama "
             "  cümle Türkçe.)\n"
             "- Hashtag'ler de Türkçe olsun (örn. #YeniÜrün, #İndirim, #Hediye).\n"
+            "- Kampanya varsa indirim oranını ve fiyatları mutlaka belirt.\n"
+            "- Müşteri görüşleri varsa 1 tanesini alıntı olarak ekle.\n"
             "- Maksimum 3 cümle.\n"
             "- İlgili hashtag'leri ekle (5-7 adet, # işaretiyle).\n"
             "- Samimi ve etkileyici bir dil kullan.\n"
@@ -840,9 +889,16 @@ def content_generator_node(state: RuleExecutionState) -> dict:
             or ""
         )
         _price = float(event_payload.get("price") or 0)
-        _discount = float(event_payload.get("discount_percent") or 0)
+        _discount = float(
+            event_payload.get("discount_pct")
+            or event_payload.get("discount_percent")
+            or 0
+        )
+        _campaign_price = event_payload.get("campaign_price")
         _old_price = _price
-        _new_price = round(_price * (1 - _discount / 100), 2) if _discount else _price
+        _new_price = float(_campaign_price) if _campaign_price else (
+            round(_price * (1 - _discount / 100), 2) if _discount else _price
+        )
         _product_img = (
             event_payload.get("image_url")
             or event_payload.get("primary_image_url")
@@ -850,13 +906,19 @@ def content_generator_node(state: RuleExecutionState) -> dict:
         )
         _category = event_payload.get("category") or ""
         _description = f"{_category}, {_price} TL" if _category else f"{_price} TL"
-        _today = datetime.now().strftime("%Y-%m-%d")
-        _end = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+        _today = event_payload.get("campaign_start") or datetime.now().strftime("%Y-%m-%d")
+        _end = event_payload.get("campaign_end") or (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
 
         _top_text = _name[:40] if _name else "Yeni Ürün"
         _main_title = _name[:60] if _name else "Yeni Ürün"
-        _subtitle = f"%{int(_discount)} İndirim" if _discount else _description
-        _button_text = "Satın Al"
+        # Discount=0 ise indirim rozeti gösterme
+        if _discount and _discount > 0:
+            _subtitle = f"%{int(_discount)} İndirim — {_new_price} TL"
+        elif _campaign_price:
+            _subtitle = f"Kampanya Fiyatı: {_new_price} TL"
+        else:
+            _subtitle = _description
+        _button_text = "Hemen Al"
 
         image_prompt = image_prompt.replace("{{PRODUCT_IMAGE}}", _product_img)
         image_prompt = image_prompt.replace("{{PRODUCT_NAME}}", _name)

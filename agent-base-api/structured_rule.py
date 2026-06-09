@@ -54,6 +54,8 @@ TRIGGER_EVENT_TYPES: tuple[str, ...] = (
 )
 
 CHANNELS: tuple[str, ...] = (
+    "story",
+    "instagram_story",
     "instagram",
     "facebook",
     "banner",
@@ -230,12 +232,7 @@ class ContentSpec(BaseModel):
     @field_validator("template")
     @classmethod
     def _validate_template(cls, v: str) -> str:
-        v = (v or "generic").strip().lower()
-        if v not in CONTENT_TEMPLATES:
-            # Bilinmeyen şablon hata değil — parser tahmin etmiş olabilir.
-            # generic'e düşür.
-            return "generic"
-        return v
+        return (v or "generic").strip().lower()
 
     @field_validator("channel")
     @classmethod

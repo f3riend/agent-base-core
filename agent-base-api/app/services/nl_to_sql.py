@@ -196,7 +196,7 @@ _TEMPLATES = {
         "description": "Bu ay ciro ve sipariş sayısı",
     },
     "yorumlar": {
-        "keywords": ["yorum", "müşteri ne diyor", "müşteriler ne düşünüyor", "değerlendirme", "puan"],
+        "keywords": ["yorum", "müşteri ne diyor", "müşteriler ne düşünüyor", "değerlendirme"],
         "sql": """
             SELECT p.name AS urun_adi,
                    p.rating AS genel_puan,
@@ -234,6 +234,157 @@ _TEMPLATES = {
             LIMIT 20
         """,
         "description": "Kampanya için ürün analizi (marj + stok + satış)",
+    },
+    "kategori_analiz": {
+        "keywords": ["hangi kategoride", "kategori bazlı", "kategorilerde kaç", "kategoriler nasıl",
+                     "kategori satış", "hangi kategoriler"],
+        "sql": """
+            SELECT p.category AS kategori,
+                   COUNT(DISTINCT p.id) AS urun_sayisi,
+                   ROUND(AVG(p.rating)::numeric, 2) AS ort_rating,
+                   ROUND(AVG((p.price - COALESCE(p.cost_price,0)) / NULLIF(p.price,0) * 100)::numeric, 2) AS ort_marj,
+                   COALESCE(SUM(oi.quantity), 0) AS toplam_satilan,
+                   ROUND(COALESCE(SUM(oi.line_total), 0)::numeric, 2) AS toplam_gelir
+            FROM products p
+            LEFT JOIN order_items oi ON oi.product_id = p.id
+            LEFT JOIN orders o ON o.id = oi.order_id
+                AND o.status NOT IN ('cancelled','refunded')
+            WHERE p.store_id = ANY(CAST(:store_ids AS uuid[]))
+              AND p.is_active = true
+            GROUP BY p.category
+            ORDER BY toplam_gelir DESC NULLS LAST
+        """,
+        "description": "Kategori bazlı ürün ve satış analizi",
+    },
+    "fiyat_sirala": {
+        "keywords": ["en pahalı", "en ucuz", "fiyat listesi", "fiyatları neler",
+                     "fiyat sırala", "en yüksek fiyat", "en düşük fiyat"],
+        "sql": """
+            SELECT name, brand, category,
+                   price AS fiyat,
+                   COALESCE(discount, 0) AS indirim,
+                   CASE WHEN discount > 0
+                        THEN ROUND((price * (1 - discount/100))::numeric, 2)
+                        ELSE price END AS indirimli_fiyat,
+                   stock_quantity AS stok
+            FROM products
+            WHERE store_id = ANY(CAST(:store_ids AS uuid[]))
+              AND is_active = true
+            ORDER BY price DESC
+            LIMIT 50
+        """,
+        "description": "Fiyat listesi ve sıralama",
+    },
+    "dusuk_stok": {
+        "keywords": ["düşük stok", "azalan stok", "tükenmek üzere", "kritik stok",
+                     "stok uyarısı", "bitmek üzere", "stok azaldı"],
+        "sql": """
+            SELECT name, brand,
+                   stock_quantity AS stok_adeti,
+                   stock_alert_level AS uyari_seviyesi,
+                   (stock_quantity - stock_alert_level) AS uyari_farki,
+                   price AS fiyat
+            FROM products
+            WHERE store_id = ANY(CAST(:store_ids AS uuid[]))
+              AND is_active = true
+              AND stock_quantity <= (stock_alert_level * 3)
+            ORDER BY stock_quantity ASC
+            LIMIT 20
+        """,
+        "description": "Düşük stok uyarısı",
+    },
+    "musteri_analiz": {
+        "keywords": ["müşteri", "sadık müşteri", "en çok harcayan", "vip müşteri",
+                     "müşterilerim kim", "en iyi müşteri"],
+        "sql": """
+            SELECT name AS musteri,
+                   total_orders AS siparis_sayisi,
+                   ROUND(total_spent::numeric, 2) AS toplam_harcama,
+                   last_order_at AS son_siparis,
+                   tags AS etiketler
+            FROM customers
+            WHERE store_id = ANY(CAST(:store_ids AS uuid[]))
+            ORDER BY total_spent DESC NULLS LAST
+            LIMIT 20
+        """,
+        "description": "Müşteri analizi",
+    },
+    "fiyat_gecmisi": {
+        "keywords": ["fiyat geçmişi", "fiyat değişti mi", "eski fiyat", "fiyat değişimi",
+                     "ne zaman değişti", "fiyat tarihi"],
+        "sql": """
+            SELECT p.name AS urun,
+                   ph.old_price AS eski_fiyat,
+                   ph.new_price AS yeni_fiyat,
+                   ROUND((ph.new_price - ph.old_price)::numeric, 2) AS fark,
+                   ph.change_reason AS neden,
+                   ph.changed_at AS tarih
+            FROM product_price_history ph
+            JOIN products p ON p.id = ph.product_id
+            WHERE p.store_id = ANY(CAST(:store_ids AS uuid[]))
+            ORDER BY ph.changed_at DESC
+            LIMIT 20
+        """,
+        "description": "Fiyat değişim geçmişi",
+    },
+    "haftalik_satis": {
+        "keywords": ["bu hafta", "geçen hafta", "haftalık satış", "son 7 gün",
+                     "hafta satış", "7 günlük"],
+        "sql": """
+            SELECT p.name,
+                   SUM(oi.quantity) AS toplam_satilan,
+                   ROUND(SUM(oi.line_total)::numeric, 2) AS toplam_gelir,
+                   COUNT(DISTINCT o.id) AS siparis_sayisi
+            FROM order_items oi
+            JOIN orders o ON o.id = oi.order_id
+            JOIN products p ON p.id = oi.product_id
+            WHERE o.store_id = ANY(CAST(:store_ids AS uuid[]))
+              AND o.status NOT IN ('cancelled','refunded')
+              AND o.ordered_at >= NOW() - INTERVAL '7 days'
+            GROUP BY p.id, p.name
+            ORDER BY toplam_satilan DESC
+            LIMIT 20
+        """,
+        "description": "Haftalık satış raporu",
+    },
+    "birlikte_alinan": {
+        "keywords": ["birlikte alınan", "birlikte satılan", "beraber alınan",
+                     "hangi ürünler beraber", "sepette birlikte", "kombine ürün"],
+        "sql": """
+            SELECT p1.name AS urun1,
+                   p2.name AS urun2,
+                   COUNT(*) AS birlikte_siparis_sayisi
+            FROM order_items oi1
+            JOIN order_items oi2 ON oi1.order_id = oi2.order_id
+                AND oi1.product_id < oi2.product_id
+            JOIN products p1 ON p1.id = oi1.product_id
+            JOIN products p2 ON p2.id = oi2.product_id
+            JOIN orders o ON o.id = oi1.order_id
+            WHERE o.store_id = ANY(CAST(:store_ids AS uuid[]))
+              AND o.status NOT IN ('cancelled','refunded')
+              AND p1.store_id = ANY(CAST(:store_ids AS uuid[]))
+              AND p2.store_id = ANY(CAST(:store_ids AS uuid[]))
+            GROUP BY p1.id, p1.name, p2.id, p2.name
+            ORDER BY birlikte_siparis_sayisi DESC
+            LIMIT 10
+        """,
+        "description": "Birlikte satılan ürün çiftleri",
+    },
+    "aylik_ciro": {
+        "keywords": ["geçen ay", "aylık gelir", "geçen ay ciro", "son 30 gün",
+                     "son ay", "önceki ay", "aylık satış"],
+        "sql": """
+            SELECT DATE_TRUNC('month', ordered_at) AS ay,
+                   COUNT(*) AS siparis_sayisi,
+                   ROUND(SUM(total_amount)::numeric, 2) AS toplam_ciro
+            FROM orders
+            WHERE store_id = ANY(CAST(:store_ids AS uuid[]))
+              AND status NOT IN ('cancelled','refunded')
+              AND ordered_at >= NOW() - INTERVAL '90 days'
+            GROUP BY DATE_TRUNC('month', ordered_at)
+            ORDER BY ay DESC
+        """,
+        "description": "Aylık ciro özeti",
     },
 }
 
@@ -319,24 +470,44 @@ def _ensure_limit(sql: str) -> str:
 # Şablon eşleştirici
 # ---------------------------------------------------------------------------
 def _match_template(question: str) -> dict | None:
-    """Şablon eşleştir. Soruda spesifik ürün/marka adı varsa şablon kullanma."""
+    """Şablon eşleştir. Öncelik sırası önemli — spesifik şablonlar önce kontrol edilir."""
     q = question.lower()
 
     # Bilinen marka/ürün isimleri varsa LLM'e bırak — şablon çok genel kalır
     specific_brands = [
         "razer", "aula", "jbl", "logitech", "steelseries", "baseus",
-        "xiaomi", "anker", "samsung", "brateck", "joby",
+        "xiaomi", "anker", "samsung", "brateck", "joby", "sony", "apple",
+        "spigen", "belkin", "ugreen", "corsair", "hyperx", "hyper x",
+        "kingston", "crucial", "western digital", "wd", "dji", "neewer",
+        "elgato", "edifier", "tp-link", "philips", "kensington", "targus",
     ]
     has_specific = any(brand in q for brand in specific_brands)
 
-    for tpl in _TEMPLATES.values():
+    # Öncelik sırası: spesifik şablonlar önce
+    priority_order = [
+        "kategori_analiz", "birlikte_alinan", "haftalik_satis", "aylik_ciro",
+        "dusuk_stok", "musteri_analiz", "fiyat_gecmisi", "fiyat_sirala",
+        "kampanya_onerisi", "en_cok_satan", "stok_durumu", "kar_marji",
+        "bu_ay_ciro", "genel_ozet", "yorumlar",
+    ]
+
+    for key in priority_order:
+        tpl = _TEMPLATES.get(key)
+        if not tpl:
+            continue
         if any(kw in q for kw in tpl["keywords"]):
-            # Spesifik ürün/marka varsa sadece genel şablonları kullan
-            if has_specific and tpl.get("specific_only", False) is False:
-                # Yorum şablonu spesifik sorgularda atlanmalı
-                if "yorum" in " ".join(tpl["keywords"]) or "puan" in " ".join(tpl["keywords"]):
-                    return None
+            # Spesifik ürün/marka varsa yorum şablonunu atla
+            if has_specific and key == "yorumlar":
+                return None
             return tpl
+
+    # Öncelik listesinde olmayan şablonları da kontrol et
+    for key, tpl in _TEMPLATES.items():
+        if key in priority_order:
+            continue
+        if any(kw in q for kw in tpl["keywords"]):
+            return tpl
+
     return None
 
 

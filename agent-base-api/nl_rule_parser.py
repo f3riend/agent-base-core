@@ -90,6 +90,10 @@ _IMMEDIATE_RE = re.compile(r"\b(?:hemen|an[ıi]nda|[şs]imdi|derhal)\b", re.IGNO
 
 # Kanal anahtar kelimeleri.
 _CHANNEL_KEYWORDS: tuple[tuple[str, str], ...] = (
+    ("instagram hikaye", "story"),
+    ("instagram story",  "story"),
+    ("hikaye",           "story"),
+    ("story",            "story"),
     ("instagram", "instagram"),
     ("facebook",  "facebook"),
     ("banner",    "banner"),
@@ -354,9 +358,8 @@ def _prefilter(text: str) -> _PrefilterResult:
         tmpl = m_tmpl.group("template").strip().lower()
         if tmpl:
             result.target_template = tmpl
-            # Eğer mevcut CONTENT_TEMPLATES içindeyse direkt template'e ata
-            if tmpl in CONTENT_TEMPLATES and not result.template:
-                result.template = tmpl
+            # target_template her zaman template olarak kullan (CONTENT_TEMPLATES dışındakiler de)
+            result.template = tmpl
 
     # 5) %X üzeri/altı koşulu
     for m_pct in _PERCENT_THRESHOLD_RE.finditer(text):
@@ -501,7 +504,7 @@ yazdığı doğal dil niyetini, JSON yapısına çevireceksin.
   },
   "content": {
     "template": "anneler_gunu | babalar_gunu | yilbasi | ramazan | kurban_bayrami | yaz_indirim | kis_indirim | kara_cuma | yeni_urun_lansman | magaza_acilis | tesekkur | ozur | ozel_indirim | generic",
-    "channel": "instagram | facebook | banner | coupon | faq | support | email | sms | trendyol | shopify",
+    "channel": "story | instagram_story | instagram | facebook | banner | coupon | faq | support | email | sms | trendyol | shopify",
     "headline_hint": null
   },
   "actions": [
@@ -658,7 +661,7 @@ def parse_rule(
 
     # LLM çıktısını over-merge — sadece geçerli alanları al
     if llm_json:
-        skeleton = _merge_llm_into_skeleton(skeleton, llm_json)
+        skeleton = _merge_llm_into_skeleton(skeleton, llm_json, prefilter)
         skeleton["parse_confidence"] = 0.9
 
     # Eksik alanları tespit et
@@ -888,7 +891,11 @@ def _approval_type_for(prefilter: _PrefilterResult, channel: str) -> str:
     return "generic_approval"
 
 
-def _merge_llm_into_skeleton(skeleton: dict, llm: dict) -> dict:
+def _merge_llm_into_skeleton(
+    skeleton: dict,
+    llm: dict,
+    prefilter: "_PrefilterResult | None" = None,
+) -> dict:
     """LLM JSON'dan güvenli üyeleri skeleton'a kopyala."""
     out = dict(skeleton)
 
@@ -918,11 +925,23 @@ def _merge_llm_into_skeleton(skeleton: dict, llm: dict) -> dict:
             out["target"]["entity_filters"] = llm["target"]["entity_filters"]
 
     if isinstance(llm.get("content"), dict):
+        # Prefilter /şablon yakaladıysa LLM'in template'i ezmesine izin verme.
+        pre_template_locked = bool(prefilter and prefilter.target_template)
         t = llm["content"].get("template")
-        if isinstance(t, str) and t.strip().lower() in CONTENT_TEMPLATES:
+        if (
+            not pre_template_locked
+            and isinstance(t, str)
+            and t.strip().lower() in CONTENT_TEMPLATES
+        ):
             out["content"]["template"] = t.strip().lower()
+        # Prefilter "story" kanalını yakaladıysa LLM ezmesin.
+        pre_channel_locked = bool(prefilter and prefilter.channel == "story")
         ch = llm["content"].get("channel")
-        if isinstance(ch, str) and ch.strip().lower() in CHANNELS:
+        if (
+            not pre_channel_locked
+            and isinstance(ch, str)
+            and ch.strip().lower() in CHANNELS
+        ):
             out["content"]["channel"] = ch.strip().lower()
         hint = llm["content"].get("headline_hint")
         if isinstance(hint, str) and hint.strip():

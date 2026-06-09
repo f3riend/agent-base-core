@@ -462,6 +462,198 @@ def _one_shot_find_product(user_id: int, question: str) -> dict | None:
     }
 
 
+def _parse_campaign_intent(question: str) -> dict:
+    """Kullanıcının doğal dil komutundan kampanya bilgilerini çıkarır.
+
+    Döner:
+        {
+            "discount_pct": 10.0,          # %10 indirim
+            "campaign_start": "2026-06-20", # kampanya başlangıç tarihi
+            "campaign_end": "2026-07-11",   # kampanya bitiş tarihi
+            "duration_days": 3,             # 3 günlük kampanya
+            "product_count": 2,             # en çok satan 2 ürün
+            "select_by": "top_sales",       # seçim kriteri
+        }
+    """
+    from datetime import datetime, timedelta
+    import re
+
+    result = {
+        "discount_pct": 0.0,
+        "campaign_start": None,
+        "campaign_end": None,
+        "duration_days": None,
+        "product_count": 1,
+        "select_by": None,
+    }
+
+    q = (question or "").lower()
+
+    # İndirim oranı — "%10", "yüzde 10", "10 indirim"
+    m = re.search(r"%\s*(\d+)|yüzde\s+(\d+)|(\d+)\s*%|(\d+)\s*(?:indirim|iskonto)", q)
+    if m:
+        val = next(v for v in m.groups() if v is not None)
+        result["discount_pct"] = float(val)
+
+    # Süre — "3 günlük", "1 haftalık"
+    m = re.search(r"(\d+)\s*günlük|(\d+)\s*gün\s*(?:süre|kampanya)", q)
+    if m:
+        val = next(v for v in m.groups() if v is not None)
+        result["duration_days"] = int(val)
+
+    m = re.search(r"(\d+)\s*haftalık|(\d+)\s*hafta", q)
+    if m:
+        val = next(v for v in m.groups() if v is not None)
+        result["duration_days"] = int(val) * 7
+
+    # Ürün sayısı — "en çok satan 2 ürün", "ilk 3 ürün"
+    m = re.search(r"en\s+(?:çok|iyi)\s+satan\s+(\d+)|ilk\s+(\d+)\s+ürün|(\d+)\s+ürün", q)
+    if m:
+        val = next(v for v in m.groups() if v is not None)
+        result["product_count"] = int(val)
+
+    if "en çok satan" in q or "çok satılan" in q:
+        result["select_by"] = "top_sales"
+    elif "en kârlı" in q or "en karlı" in q:
+        result["select_by"] = "top_margin"
+
+    # Tarih parse — "bu ayın 20'si", "gelecek ayın 11'i"
+    today = datetime.now()
+    current_month = today.replace(day=1)
+    next_month = (current_month + timedelta(days=32)).replace(day=1)
+
+    # Başlangıç tarihi
+    m_start = re.search(
+        r"bu\s+ay[ıi]n\s+(\d+)(?:'?[ıiuü]?\s*(?:ile|ile\s+başla|den\s+itibaren))?",
+        q
+    )
+    if m_start:
+        day = int(m_start.group(1))
+        try:
+            result["campaign_start"] = today.replace(day=day).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+
+    # Bitiş tarihi
+    m_end = re.search(r"gelecek\s+ay[ıi]n\s+(\d+)", q)
+    if m_end:
+        day = int(m_end.group(1))
+        try:
+            result["campaign_end"] = next_month.replace(day=day).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+
+    # Süre varsa ve başlangıç varsa bitiş hesapla
+    if result["campaign_start"] and result["duration_days"] and not result["campaign_end"]:
+        start = datetime.strptime(result["campaign_start"], "%Y-%m-%d")
+        result["campaign_end"] = (start + timedelta(days=result["duration_days"])).strftime("%Y-%m-%d")
+
+    # Başlangıç yoksa bugün
+    if not result["campaign_start"]:
+        result["campaign_start"] = today.strftime("%Y-%m-%d")
+        if result["duration_days"] and not result["campaign_end"]:
+            result["campaign_end"] = (today + timedelta(days=result["duration_days"])).strftime("%Y-%m-%d")
+
+    return result
+
+
+def _one_shot_find_top_products(user_id: int, count: int = 1, by: str = "top_sales") -> list[dict]:
+    """En çok satan veya en kârlı N ürünü döner."""
+    try:
+        from app.core.database import SessionLocal
+        from app.services.access_control import get_user_store_ids
+        from sqlalchemy import text
+
+        store_ids = get_user_store_ids(user_id)
+        if not store_ids:
+            return []
+
+        with SessionLocal() as session:
+            if by == "top_margin":
+                sql = text("""
+                    SELECT p.id::text, p.name, p.brand, p.category,
+                           p.price, p.cost_price, p.stock_quantity,
+                           p.rating, p.rating_count, p.description,
+                           ROUND(((p.price - p.cost_price) / p.price * 100)::numeric, 2) AS marj
+                    FROM products p
+                    WHERE p.store_id = ANY(CAST(:store_ids AS uuid[]))
+                      AND p.is_active = true
+                      AND p.cost_price IS NOT NULL AND p.price > 0
+                    ORDER BY marj DESC NULLS LAST
+                    LIMIT :cnt
+                """)
+            else:  # top_sales
+                sql = text("""
+                    SELECT p.id::text, p.name, p.brand, p.category,
+                           p.price, p.cost_price, p.stock_quantity,
+                           p.rating, p.rating_count, p.description,
+                           COALESCE(SUM(oi.quantity), 0) AS toplam_satis
+                    FROM products p
+                    LEFT JOIN order_items oi ON oi.product_id = p.id
+                    LEFT JOIN orders o ON o.id = oi.order_id
+                        AND o.status NOT IN ('cancelled','refunded')
+                    WHERE p.store_id = ANY(CAST(:store_ids AS uuid[]))
+                      AND p.is_active = true
+                    GROUP BY p.id, p.name, p.brand, p.category,
+                             p.price, p.cost_price, p.stock_quantity,
+                             p.rating, p.rating_count, p.description
+                    ORDER BY toplam_satis DESC NULLS LAST
+                    LIMIT :cnt
+                """)
+
+            rows = session.execute(sql, {"store_ids": store_ids, "cnt": count}).fetchall()
+            return [dict(r._mapping) for r in rows]
+    except Exception as exc:
+        print(f"[CHAT] _one_shot_find_top_products failed: {exc}")
+        return []
+
+
+def _one_shot_enrich_context(product_id: str, store_ids: list) -> dict:
+    """Ürün için ek context çeker: marj, stok, satış trendi, rating özeti."""
+    try:
+        from app.core.database import SessionLocal
+        from sqlalchemy import text
+
+        with SessionLocal() as session:
+            row = session.execute(text("""
+                SELECT
+                    p.price,
+                    p.cost_price,
+                    ROUND((p.price - COALESCE(p.cost_price,0))::numeric, 2) AS kar,
+                    CASE WHEN p.price > 0 AND p.cost_price IS NOT NULL
+                         THEN ROUND(((p.price-p.cost_price)/p.price*100)::numeric,2)
+                         ELSE NULL END AS marj_yuzde,
+                    p.stock_quantity AS stok,
+                    p.rating,
+                    p.rating_count,
+                    COALESCE(SUM(oi.quantity), 0) AS bu_ay_satis
+                FROM products p
+                LEFT JOIN order_items oi ON oi.product_id = p.id
+                LEFT JOIN orders o ON o.id = oi.order_id
+                    AND o.status NOT IN ('cancelled','refunded')
+                    AND o.ordered_at >= DATE_TRUNC('month', NOW())
+                WHERE p.id = :pid
+                GROUP BY p.id, p.price, p.cost_price, p.stock_quantity,
+                         p.rating, p.rating_count
+            """), {"pid": product_id}).fetchone()
+
+            if not row:
+                return {}
+
+            r = dict(row._mapping)
+            return {
+                "kar": float(r["kar"]) if r["kar"] else None,
+                "marj_yuzde": float(r["marj_yuzde"]) if r["marj_yuzde"] else None,
+                "stok": int(r["stok"]) if r["stok"] is not None else None,
+                "rating": float(r["rating"]) if r["rating"] else None,
+                "rating_count": int(r["rating_count"]) if r["rating_count"] else None,
+                "bu_ay_satis": int(r["bu_ay_satis"]),
+            }
+    except Exception as exc:
+        print(f"[CHAT] _one_shot_enrich_context failed: {exc}")
+        return {}
+
+
 def _one_shot_positive_reviews(product_id: str, limit: int = 5) -> list[str]:
     """Ürünün rating>=4 son N yorumunun içeriğini liste olarak döner."""
     try:
@@ -498,18 +690,71 @@ def _one_shot_run(question: str, user_id: int) -> dict | None:
         print(f"[CHAT] one-shot heavy imports failed: {exc}")
         return None
 
-    product = _one_shot_find_product(user_id, question)
-    reviews = _one_shot_positive_reviews(product["id"], limit=5) if product else []
+    # Kampanya intent parse — tarih, indirim, ürün sayısı
+    campaign_intent = _parse_campaign_intent(question)
+    discount_pct = campaign_intent.get("discount_pct") or 0.0
+    campaign_start = campaign_intent.get("campaign_start")
+    campaign_end = campaign_intent.get("campaign_end")
+    product_count = campaign_intent.get("product_count") or 1
+    select_by = campaign_intent.get("select_by")
+
+    # Ürün seçimi — "en çok satan 2 ürün" veya tek ürün
+    products_list: list[dict] = []
+    if select_by and product_count > 1:
+        products_list = _one_shot_find_top_products(user_id, count=product_count, by=select_by)
+    elif select_by and product_count == 1:
+        products_list = _one_shot_find_top_products(user_id, count=1, by=select_by)
+    
+    # Spesifik ürün adı varsa bul
+    single_product = _one_shot_find_product(user_id, question)
+    if single_product and not products_list:
+        products_list = [single_product]
+    elif not products_list:
+        products_list = [single_product] if single_product else []
+
+    # İlk ürünle devam et (çoklu ürün için loop eklenebilir)
+    product = products_list[0] if products_list else None
     p = product or {}
 
-    # Açıklamayı yorumlarla zenginleştir — caption üreticisi description
-    # alanını okuyor, olumlu yorumlar caption'ı daha somut yapıyor.
+    # Ek context: marj, stok, satış trendi
+    from app.services.access_control import get_user_store_ids as _get_store_ids
+    _store_ids = _get_store_ids(user_id)
+    extra_ctx = _one_shot_enrich_context(p.get("id", ""), _store_ids) if p.get("id") else {}
+
+    # Kampanya fiyatı hesapla
+    base_price = float(p.get("price") or 0)
+    campaign_price = round(base_price * (1 - discount_pct / 100), 2) if discount_pct and base_price else None
+
+    reviews = _one_shot_positive_reviews(p["id"], limit=5) if p.get("id") else []
+
+    # Açıklamayı yorumlar + kampanya bilgisiyle zenginleştir
     base_desc = p.get("description") or ""
+    enrichment_parts = []
     if reviews:
         review_text = "\n".join(f"- {r}" for r in reviews[:5])
+        enrichment_parts.append(f"Müşteri yorumları:\n{review_text}")
+    if discount_pct:
+        enrichment_parts.append(
+            f"Kampanya: %{int(discount_pct)} indirim"
+            + (f" | {base_price} TL → {campaign_price} TL" if campaign_price else "")
+        )
+    if campaign_start:
+        date_range = campaign_start
+        if campaign_end:
+            date_range += f" - {campaign_end}"
+        enrichment_parts.append(f"Kampanya tarihleri: {date_range}")
+    if extra_ctx.get("marj_yuzde"):
+        enrichment_parts.append(f"Kar marjı: %{extra_ctx['marj_yuzde']}")
+    if extra_ctx.get("stok") is not None:
+        enrichment_parts.append(f"Stok: {extra_ctx['stok']} adet")
+    if extra_ctx.get("rating"):
+        oy = f" ({extra_ctx['rating_count']} oy)" if extra_ctx.get("rating_count") else ""
+        enrichment_parts.append(f"Rating: {extra_ctx['rating']}/5{oy}")
+
+    if enrichment_parts:
         enriched_desc = (
-            f"{base_desc}\n\nMüşteri yorumları:\n{review_text}"
-            if base_desc else f"Müşteri yorumları:\n{review_text}"
+            f"{base_desc}\n\n" + "\n".join(enrichment_parts)
+            if base_desc else "\n".join(enrichment_parts)
         )
     else:
         enriched_desc = base_desc
@@ -542,6 +787,19 @@ def _one_shot_run(question: str, user_id: int) -> dict | None:
         "category":          p.get("category"),
         "description":       enriched_desc,
         "reviews_positive":  reviews,
+        # Kampanya bilgileri
+        "discount_pct":      discount_pct if discount_pct else None,
+        "discount_percent":  discount_pct if discount_pct else None,
+        "campaign_price":    campaign_price,
+        "campaign_start":    campaign_start,
+        "campaign_end":      campaign_end,
+        # Ek context
+        "kar":               extra_ctx.get("kar"),
+        "marj_yuzde":        extra_ctx.get("marj_yuzde"),
+        "stok":              extra_ctx.get("stok"),
+        "rating":            extra_ctx.get("rating"),
+        "rating_count":      extra_ctx.get("rating_count"),
+        "bu_ay_satis":       extra_ctx.get("bu_ay_satis"),
         # FLAT alanlar — content_generator_node primary_image_url /
         # image_url / image_urls / store_logo_url / logo_url /
         # banner_url / store_banner_url isimleriyle okuyor.
