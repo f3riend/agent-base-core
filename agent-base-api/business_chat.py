@@ -683,7 +683,7 @@ def _one_shot_run(question: str, user_id: int) -> dict | None:
     """
     try:
         from nl_rule_parser import parse_rule
-        from structured_rule_engine import save_rule, set_enabled
+        from structured_rule_engine import save_rule, set_enabled, delete_rule
         from langgraph_engine.runtime import start_execution
         from structured_rule import TriggerSpec
     except Exception as exc:
@@ -866,9 +866,9 @@ def _one_shot_run(question: str, user_id: int) -> dict | None:
     # enabled flag'i kontrol etmez — yani aktif execution etkilenmez.
     try:
         if saved.id:
-            set_enabled(int(saved.id), False)
+            delete_rule(int(saved.id))
     except Exception as exc:
-        print(f"[CHAT] post-execution disable failed: {exc}")
+        print(f"[CHAT] post-execution cleanup failed: {exc}")
 
     status = exec_result.get("status") or "unknown"
     product_name = (product or {}).get("name") or "ürün"

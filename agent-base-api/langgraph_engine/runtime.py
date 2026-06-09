@@ -171,10 +171,13 @@ def _build_canonical_graph(rule: StructuredRule):
         g.add_edge(a, b)
     g.add_edge("finalize", END)
 
+    # interrupt_after kullanıyoruz: node ÇALIŞIR, DB'ye row yazar, SONRA durur.
+    # interrupt_before olsaydı approval_gate_node hiç çalışmazdı →
+    # create_approval_request çağrılmazdı → approval_id=NULL kalırdı.
     interrupt_before: list[str] = []
     interrupt_after: list[str] = []
     if "approval" in selected:
-        interrupt_before.append("approval")
+        interrupt_after.append("approval")
     # Tur 2: wait_node'u runtime'da gerçekten "duraklat" — wait node'u
     # çalıştırdıktan SONRA graph durur. workflow_worker scheduled
     # entry'yi tetiklediğinde resume_after_wait çağrılır, kalan
@@ -688,15 +691,21 @@ def _do_resume_after_wait(execution_id: int, row: dict) -> dict:
         (int(row["rule_id"]),),
         one=True,
     )
-    if not rule_row:
-        _update_execution_row(
-            execution_id, status="failed",
-            error="rule_not_found_at_resume", end=True,
-        )
-        return {"execution_id": execution_id, "status": "failed",
-                "error": "rule no longer exists"}
-
-    rule = StructuredRule.from_storage(dict(rule_row))
+    if rule_row:
+        rule = StructuredRule.from_storage(dict(rule_row))
+    else:
+        # Checkpoint'ten kurtarıyoruz
+        _tmp = _build_minimal_graph_for_snapshot()
+        _snap = _read_snapshot(_tmp, row["thread_id"])
+        rule_dict = _snap.get("rule")
+        if not rule_dict:
+            _update_execution_row(
+                execution_id, status="failed",
+                error="rule_not_found_at_resume", end=True,
+            )
+            return {"execution_id": execution_id, "status": "failed",
+                    "error": "rule no longer exists"}
+        rule = StructuredRule(**rule_dict)
     graph = build_graph(rule)
 
     # State'i running'e set et — wait_node'un beklediği "delay_satisfied"
@@ -777,16 +786,28 @@ def resume_execution(
 
     thread_id = row["thread_id"]
 
-    # Rule'u snapshot'tan tekrar yükle (DB'den de okunabilir; thread güvende)
+    # Rule'u yükle: önce structured_rules tablosunu dene, yoksa
+    # checkpoint state içindeki rule_dict'i kullan.
     from structured_rule import StructuredRule
     rule_row = execute_query(
         "SELECT * FROM structured_rules WHERE id=?",
         (int(row["rule_id"]),),
         one=True,
     )
-    if not rule_row:
-        raise ValueError("rule not found for execution")
-    rule = StructuredRule.from_storage(dict(rule_row))
+    if rule_row:
+        rule = StructuredRule.from_storage(dict(rule_row))
+    else:
+        # Tablo boş veya rule silinmiş — checkpoint'ten kurtarıyoruz.
+        # Geçici bir checkpointer ile state'i okuyup rule_dict'i alıyoruz.
+        _tmp_graph_for_snapshot = _build_minimal_graph_for_snapshot()
+        _snap = _read_snapshot(_tmp_graph_for_snapshot, thread_id)
+        rule_dict = _snap.get("rule")
+        if not rule_dict:
+            raise ValueError(
+                f"rule {row['rule_id']} structured_rules tablosunda yok "
+                f"ve checkpoint state'inde de bulunamadı (thread={thread_id})"
+            )
+        rule = StructuredRule(**rule_dict)
     graph = build_graph(rule)
 
     # State patch: approval.decision = 'approved' (vs.)
@@ -862,6 +883,21 @@ def resume_execution(
 # ---------------------------------------------------------------------------
 # LangGraph snapshot helpers
 # ---------------------------------------------------------------------------
+
+
+def _build_minimal_graph_for_snapshot() -> Any:
+    """Sadece checkpoint okumak için — node'suz boş bir graph compile eder.
+
+    resume_execution ve _do_resume_after_wait structured_rules tablosunda
+    rule bulamadığında checkpoint state'inden rule_dict'i okumak için
+    bu fonksiyonu kullanır. Gerçek execution için değil, sadece get_state()
+    çağrısı için kullanılır.
+    """
+    g = StateGraph(RuleExecutionState)
+    g.add_node("_noop", lambda s: s)
+    g.add_edge(START, "_noop")
+    g.add_edge("_noop", END)
+    return g.compile(checkpointer=get_checkpointer())
 
 
 def _read_snapshot(graph, thread_id: str) -> dict:

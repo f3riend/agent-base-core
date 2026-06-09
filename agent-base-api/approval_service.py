@@ -73,7 +73,7 @@ def _is_external_publish_plan(plan: dict) -> bool:
     # Bu post_approval/story_approval/banner_approval/campaign_approval'sa dış
     # yayın anlamına gelir — assess_approval_need'i tetikle.
     atype = (plan.get("approval_type") or "").strip().lower()
-    if atype in ("post_approval", "story_approval", "banner_approval", "campaign_approval"):
+    if atype in ("post_approval", "story_approval", "banner_approval", "campaign_approval", "generic_approval", "structured_rule_execution"):
         return True
     return False
 

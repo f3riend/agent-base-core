@@ -1224,10 +1224,25 @@ def approval_gate_node(state: RuleExecutionState) -> dict:
     try:
         from approval_service import create_approval_request
 
-        # approval_type'i dinamik node params'tan veya rule.graph_definition'dan al.
-        # Eski yolda params boş döner → "generic_approval" default'una düşer.
+        # approval_type'i önce params'tan al; yoksa channel'a göre türet.
+        # _is_external_publish_plan 'generic_approval' kabul etmiyor,
+        # bu yüzden channel'a bakarak doğru tipi seçiyoruz.
         params = _get_node_params(state)
-        approval_type = (params.get("approval_type") or "generic_approval").strip().lower()
+        approval_type = (params.get("approval_type") or "").strip().lower()
+        if not approval_type or approval_type == "generic_approval":
+            _content = state.get("content") or {}
+            _channel = (
+                _content.get("channel")
+                or (state.get("event") or {}).get("payload", {}).get("channel")
+                or ""
+            ).strip().lower()
+            approval_type = {
+                "story":           "story_approval",
+                "instagram_story": "story_approval",
+                "banner":          "banner_approval",
+                "instagram":       "post_approval",
+                "facebook":        "post_approval",
+            }.get(_channel, "campaign_approval")
 
         proposal = {
             "decision": "create_workflow",

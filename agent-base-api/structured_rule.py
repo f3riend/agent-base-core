@@ -667,7 +667,9 @@ def _synthesize_graph_from_actions(rule: "StructuredRule") -> GraphDefinition:
         ))
 
         if node_type == "approval_gate":
-            interrupt_before.append(node_id)
+            # interrupt_after: node çalışsın ve approval_requests'e yazsın,
+            # sonra graph dursun. interrupt_before olsaydı node hiç çalışmazdı.
+            interrupt_after.append(node_id)
         if node_type == "wait" and int(params.get("delay_seconds") or 0) > 0:
             interrupt_after.append(node_id)
 
