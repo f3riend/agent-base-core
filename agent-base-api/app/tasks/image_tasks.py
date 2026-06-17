@@ -307,6 +307,11 @@ def revise_image_task(
         _logger.info("revise_image_task done task_id={} images={}", task_id, len(images))
         return {"images": images, "session_id": task_id[:10]}
 
+    except FileNotFoundError as exc:
+        # Şablon görseli silinmiş — retry yapma, direkt hata dön
+        _logger.warning("revise_image_task skipped — reference image not found: {}", exc)
+        raise RuntimeError(f"Şablon görseli bulunamadı, lütfen tekrar deneyin: {exc}") from exc
+
     except Exception as exc:
         _logger.exception("revise_image_task failed task_id={}", task_id)
         try:

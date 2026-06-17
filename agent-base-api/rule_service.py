@@ -20,6 +20,45 @@ from rule_engine import parse_rules_content
 
 RULES_PATH = os.environ.get("RULES_PATH", "rules.txt")
 
+
+def _format_condition(condition: dict) -> str:
+    value = condition["value"]
+    if isinstance(value, str):
+        value_str = value
+    elif isinstance(value, bool):
+        value_str = "true" if value else "false"
+    else:
+        value_str = str(value)
+    return f"{condition['field']} {condition['operator']} {value_str}"
+
+
+def format_rule_block(rule: dict) -> str:
+    lines = [
+        f"RULE {rule['name']}",
+        "WHEN",
+        rule["when"],
+    ]
+
+    if rule.get("conditions"):
+        lines.append("IF")
+        for cond in rule["conditions"]:
+            lines.append(_format_condition(cond))
+
+    lines.append("THEN")
+
+    if rule.get("workflow"):
+        lines.append(f"workflow {rule['workflow']}")
+
+    delay = rule.get("delay", 0)
+    if delay:
+        lines.append(f"delay {delay}d")
+
+    if rule.get("cancel_workflow"):
+        lines.append(f"cancel_workflow {rule['cancel_workflow']}")
+
+    return "\n".join(lines)
+
+
 # In-memory cache: user_id → { rules, loaded_at, version }
 RULE_CACHE: dict[int, dict[str, Any]] = {}
 _CACHE_LOCK = threading.Lock()
@@ -225,8 +264,6 @@ def save_rules_batch(
     natural_language: str | None = None,
 ):
     """Persist compiled rule dicts to DB."""
-    from rule_manager import format_rule_block
-
     for rule in rules:
         dsl = format_rule_block(rule)
         upsert_rule(
@@ -239,8 +276,6 @@ def save_rules_batch(
 
 def export_to_file(user_id: int = DEFAULT_USER_ID, path: str = RULES_PATH):
     """Optional export layer — rules.txt is NOT primary."""
-    from rule_manager import format_rule_block
-
     rows = execute_query(
         "SELECT dsl FROM rules WHERE user_id=? AND enabled=1 ORDER BY id",
         (user_id,),
@@ -266,7 +301,6 @@ def import_from_file(
     parsed = parse_rules_content(content)
     count = 0
     for rule in parsed:
-        from rule_manager import format_rule_block
         upsert_rule(
             user_id=user_id,
             rule_name=rule["name"],

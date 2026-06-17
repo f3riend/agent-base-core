@@ -885,12 +885,16 @@ def _build_campaign_banner_revision_prompt(
 
 def _download_image(image_url: str) -> tuple[bytes, str]:
     """Download an image URL into bytes with strict validation.
-    data:image/... URI'lerini de destekler (base64 decode)."""
+
+    Supports two input forms:
+      - data:image/...;base64,... URI (decoded inline).
+      - http(s):// URL (fetched via HTTP).
+    """
     url = (image_url or "").strip()
     if not url:
         raise ValueError("Image URL must not be empty.")
-    
-    # data URI desteği — base64 inline görsel (local disk'ten okunan)
+
+    # data URI desteği — base64 inline görsel
     if url.startswith("data:"):
         try:
             import base64 as _b64

@@ -57,9 +57,12 @@ class ChannelAdapter(Protocol):
 def get_adapter(provider: str) -> ChannelAdapter | None:
     """Provider id'den adapter instance döndür (yoksa None)."""
     from tool_adapters import facebook, instagram, tiktok
+    _instagram = instagram.InstagramAdapter()
     adapters: dict[str, ChannelAdapter] = {
-        "instagram": instagram.InstagramAdapter(),
-        "facebook":  facebook.FacebookAdapter(),
-        "tiktok":    tiktok.TikTokAdapter(),
+        "instagram":       _instagram,
+        "story":           _instagram,   # story → instagram adapter
+        "instagram_story": _instagram,   # instagram_story → instagram adapter
+        "facebook":        facebook.FacebookAdapter(),
+        "tiktok":          tiktok.TikTokAdapter(),
     }
     return adapters.get(provider)

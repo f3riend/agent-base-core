@@ -107,11 +107,12 @@ _SCHEMA_JSON = {
         "warning": "product_id YOKTUR — mağaza bazlı tablo. Ürün bazlı kampanya analizi için order_items kullan.",
     },
     "customers": {
-        "columns": ["id", "store_id", "name", "email", "phone", "total_orders",
-                    "total_spent", "first_order_at", "last_order_at", "tags"],
+        "columns": ["id", "store_id", "name", "email", "phone", "city", "gender", "age",
+                    "total_orders", "total_spent", "first_order_at", "last_order_at", "tags"],
         "pk": "id",
         "filter": "store_id = ANY(CAST(:store_ids AS uuid[]))",
-        "use_for": ["müşteri analizi", "VIP müşteri", "sadık müşteri", "müşteri harcama"],
+        "use_for": ["müşteri analizi", "VIP müşteri", "sadık müşteri", "müşteri harcama",
+                    "şehir bazlı analiz", "cinsiyet analizi", "yaş analizi", "hedef kitle", "müşteri demografisi"],
     },
 }
 

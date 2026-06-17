@@ -27,7 +27,6 @@ from business_state import build_business_state
 from db import DEFAULT_USER_ID, execute_query, init_db
 from planner_memory import get_memory_summary_for_api
 from planner_runtime import apply_approved_proposal
-from rule_manager import RuleManager
 from rule_service import (
     delete_rule,
     export_to_file,
@@ -43,18 +42,6 @@ from tool_registry import get_registry_for_api
 init_db()
 
 router = APIRouter(prefix="/api/internal", tags=["internal-orchestration"])
-
-
-class RulePreviewRequest(BaseModel):
-    natural_language: str
-    user_id: int = DEFAULT_USER_ID
-    rule_name: Optional[str] = None
-    mode: str = "upsert"
-    use_ai: bool = False
-
-
-class RuleApplyRequest(RulePreviewRequest):
-    pass
 
 
 class AutonomousPreviewRequest(BaseModel):
@@ -159,74 +146,12 @@ async def get_rules(
     return {"data": rules, "user_id": user_id, "cache": cache}
 
 
-@router.post("/rules/preview")
-async def preview_rules(body: RulePreviewRequest):
-    manager = RuleManager(user_id=body.user_id)
-    result = manager.preview(
-        body.natural_language,
-        rule_name=body.rule_name,
-        mode=body.mode,
-        use_ai=body.use_ai,
-    )
-    autonomous = preview_plan_from_natural_language(
-        body.natural_language, user_id=body.user_id
-    )
-    return {
-        "success": result.success,
-        "message": result.message,
-        "dsl_preview": result.dsl_preview,
-        "full_content_preview": result.full_content_preview,
-        "conflicts": result.conflicts,
-        "duplicates": result.duplicates,
-        "validation": {
-            "valid": result.validation.valid if result.validation else False,
-            "errors": result.validation.errors if result.validation else [],
-        },
-        "generated_rules": result.generated_rules,
-        "semantic": result.semantic.to_dict() if result.semantic else None,
-        "autonomous_plan": autonomous,
-    }
-
-
 @router.post("/rules/preview-autonomous")
 async def preview_autonomous(body: AutonomousPreviewRequest):
     plan = preview_plan_from_natural_language(
         body.natural_language, user_id=body.user_id
     )
     return {"success": True, "plan": plan}
-
-
-@router.post("/rules/apply")
-async def apply_rules(body: RuleApplyRequest):
-    manager = RuleManager(user_id=body.user_id)
-    result = manager.apply(
-        body.natural_language,
-        rule_name=body.rule_name,
-        mode=body.mode,
-        use_ai=body.use_ai,
-    )
-    if not result.success:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "message": result.message,
-                "conflicts": result.conflicts,
-                "duplicates": result.duplicates,
-                "validation_errors": (
-                    result.validation.errors if result.validation else []
-                ),
-                "semantic": (
-                    result.semantic.to_dict() if result.semantic else None
-                ),
-            },
-        )
-    return {
-        "success": True,
-        "message": result.message,
-        "history_id": result.history_id,
-        "rules": list_rules(user_id=body.user_id),
-        "semantic": result.semantic.to_dict() if result.semantic else None,
-    }
 
 
 @router.delete("/rules/{rule_id}")
