@@ -21,7 +21,6 @@ dist-ssr
 agent-base-api/.env
 
 *.db
-*.lock
 *.txt
 *.md
 
