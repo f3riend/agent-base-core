@@ -703,8 +703,17 @@ def _generate_image_via_pipeline(
                         if data_uri not in seen:
                             seen.add(data_uri)
                             all_refs.append(data_uri)
+                    else:
+                        # fallback: dosya disk'te yoksa orijinal URL'yi ekle
+                        if s not in seen:
+                            seen.add(s)
+                            all_refs.append(s)
             except Exception as _exc:
-                pass
+                print(f"[_push ERROR] {_exc}")
+                # fallback: orijinal URL'yi ekle
+                if s not in seen:
+                    seen.add(s)
+                    all_refs.append(s)
         else:
             seen.add(s)
             all_refs.append(s)
@@ -731,40 +740,83 @@ def _generate_image_via_pipeline(
     extras_text: list[str] = []
     if reference_image_url or reference_image_urls:
         extras_text.append(
-            "Use the template image as the PRIMARY base layout — "
-            "keep its design structure, colors and composition"
+            "CRITICAL: The FIRST image is the TEMPLATE. You MUST preserve its exact layout, "
+            "color scheme, text zones, background composition, and overall structure. "
+            "Do NOT redesign or create a new layout. Only update the product visuals and text content."
         )
     if product_image_url or product_image_urls:
         extras_text.append(
-            "Replace the product in the template with this product image, "
-            "keeping the template layout intact"
+            "Place THIS product image into the template's product zone, keeping the template layout intact. "
+            "Match the product's proportions and position to fit naturally within the existing design."
         )
     if store_logo_url:
-        extras_text.append("Include the store logo subtly in the design")
+        extras_text.append(
+            "Keep the store logo exactly as shown in the template, in its original position."
+        )
     if extras_text:
-        prompt = (prompt or "").strip() + ". " + ". ".join(extras_text) + "."
+        prompt = (
+            "TEMPLATE ADAPTATION — DO NOT CREATE A NEW DESIGN.\n"
+            "Follow these rules strictly:\n"
+            + "\n".join(f"- {t}" for t in extras_text)
+            + "\n\nContent to update in the template:\n"
+            + (prompt or "").strip()
+        )
 
     plat = "story" if (channel or "").strip().lower() == "story" else "feed"
-    try:
-        from app.api.social_media import _sync_generate_images_task
-        images = _sync_generate_images_task(
-            prompt=prompt or "",
-            count=1,
-            platform=plat,
-            reference_image_url=primary_ref,
-            fal_api_key=fal_key,
-            openai_api_key=openai_key,
-            use_gpt=False,
-            reference_image_urls=all_refs or None,
-            output_size=output_size,
-            skip_professionalization=skip_professionalization,
-        )
-        if isinstance(images, list) and images:
-            first = images[0] if isinstance(images[0], dict) else {}
-            url = (first.get("url") or "").strip()
-            return url or None
-    except Exception as exc:
-        print(f"[_generate_image_via_pipeline] skip ({type(exc).__name__}): {exc}")
+
+    # Şablon varsa → revise (şablonu koru, sadece içeriği güncelle)
+    # Şablon yoksa → generate (sıfırdan üret)
+    if primary_ref:
+        try:
+            from app.services.content_service import revise_image_with_feedback
+            revision_prompt = (
+                "Bu şablonu KORU. Layout, renkler, kompozisyon, şekiller ve genel yapıyı değiştirme. "
+                "Görseli tam olarak verilen boyuta (tüm piksel alanına) yay — beyaz boşluk, kenar boşluğu veya "
+                "letterbox bırakma. İçerik tüm frame'i doldurmalı. "
+                "SADECE şu içerikleri güncelle:\n"
+                + (prompt or "").strip()
+            )
+            rc = (
+                "campaign_banner"
+                if (output_size or "").strip().lower() in ("campaign_banner", "1600x704", "1600x700")
+                else "social"
+            )
+            images = revise_image_with_feedback(
+                image_url=primary_ref,
+                feedback=revision_prompt,
+                count=1,
+                openai_api_key=openai_key,
+                platform=plat,
+                output_size=output_size,
+                revision_context=rc,
+            )
+            if isinstance(images, list) and images:
+                first = images[0] if isinstance(images[0], dict) else {}
+                url = (first.get("url") or "").strip()
+                return url or None
+        except Exception as exc:
+            print(f"[_generate_image_via_pipeline revise] skip ({type(exc).__name__}): {exc}")
+    else:
+        try:
+            from app.api.social_media import _sync_generate_images_task
+            images = _sync_generate_images_task(
+                prompt=prompt or "",
+                count=1,
+                platform=plat,
+                reference_image_url=None,
+                fal_api_key=fal_key,
+                openai_api_key=openai_key,
+                use_gpt=False,
+                reference_image_urls=None,
+                output_size=output_size,
+                skip_professionalization=True,
+            )
+            if isinstance(images, list) and images:
+                first = images[0] if isinstance(images[0], dict) else {}
+                url = (first.get("url") or "").strip()
+                return url or None
+        except Exception as exc:
+            print(f"[_generate_image_via_pipeline generate] skip ({type(exc).__name__}): {exc}")
     return None
 
 
@@ -995,6 +1047,10 @@ def content_generator_node(state: RuleExecutionState) -> dict:
 
     if channel == "banner":
         output_size = "campaign_banner"
+
+    # Channel story ise şablon outputSize'ı ne olursa olsun story boyutuna zorla
+    if channel in ("story", "instagram_story"):
+        output_size = "story"
 
     product_image_url: str | None = (
         event_payload.get("primary_image_url")
