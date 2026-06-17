@@ -400,21 +400,6 @@ def init_db():
         _ensure_column(c, "approval_requests", "proposal_hash", "TEXT")
         _ensure_column(c, "approval_requests", "approval_type", "TEXT DEFAULT 'generic_approval'")
 
-        # ----- Tur 2: structured_rules versioning -----
-        _ensure_column(c, "structured_rules", "version", "INTEGER DEFAULT 1")
-        _ensure_column(c, "structured_rules", "parent_rule_id", "INTEGER")
-        _ensure_column(c, "structured_rules", "is_current", "INTEGER DEFAULT 1")
-        _ensure_column(c, "structured_rules", "supersedes_at", "TEXT")
-
-        # ----- Tur 3: rule learning + suggestions -----
-        # health_score runtime success'ten gelir (parse_confidence parser'dan).
-        # 0..1 aralığında, default 0.7 (yeni kural için tarafsız zemin).
-        _ensure_column(c, "structured_rules", "health_score", "REAL DEFAULT 0.7")
-        _ensure_column(c, "structured_rules", "last_outcome", "TEXT")
-        _ensure_column(c, "structured_rules", "success_count", "INTEGER DEFAULT 0")
-        _ensure_column(c, "structured_rules", "failure_count", "INTEGER DEFAULT 0")
-        _ensure_column(c, "structured_rules", "cancel_count", "INTEGER DEFAULT 0")
-
         # ----- LangGraph structured rules (Phase R: rule rewrite) -----
         # `structured_rules` holds the operator's parsed NL rule. Each row
         # carries the original Turkish prompt + the canonical Pydantic
@@ -445,6 +430,21 @@ def init_db():
             "CREATE INDEX IF NOT EXISTS idx_struct_rules_user "
             "ON structured_rules (user_id, enabled)"
         )
+
+        # ----- Tur 2: structured_rules versioning -----
+        _ensure_column(c, "structured_rules", "version", "INTEGER DEFAULT 1")
+        _ensure_column(c, "structured_rules", "parent_rule_id", "INTEGER")
+        _ensure_column(c, "structured_rules", "is_current", "INTEGER DEFAULT 1")
+        _ensure_column(c, "structured_rules", "supersedes_at", "TEXT")
+
+        # ----- Tur 3: rule learning + suggestions -----
+        # health_score runtime success'ten gelir (parse_confidence parser'dan).
+        # 0..1 aralığında, default 0.7 (yeni kural için tarafsız zemin).
+        _ensure_column(c, "structured_rules", "health_score", "REAL DEFAULT 0.7")
+        _ensure_column(c, "structured_rules", "last_outcome", "TEXT")
+        _ensure_column(c, "structured_rules", "success_count", "INTEGER DEFAULT 0")
+        _ensure_column(c, "structured_rules", "failure_count", "INTEGER DEFAULT 0")
+        _ensure_column(c, "structured_rules", "cancel_count", "INTEGER DEFAULT 0")
 
         # `rule_executions` — one row per (rule_id, event_id) graph instance.
         # `thread_id` is the LangGraph checkpoint thread; resume operations
