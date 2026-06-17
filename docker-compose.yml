@@ -1,8 +1,8 @@
 # VITE_BASE_PATH / APP_BASE_PATH: kok .env ile; alt dizin ornegi /posting/agent-base/ + imaj yeniden build.
 # Arayüz Docker icinde PHP (php-ui); API degismedi.
-# Yerel tam stack: Redis + MySQL + all-in-one. API veritabani icin varsayilan:
-#   DOCKER_DATABASE_URL (bos ise) -> mysql servisindeki agentbase kullanicisi.
-# Harici MySQL kullanacaksan proje kokundeki .env veya ortamda DOCKER_DATABASE_URL ayarla.
+# Yerel tam stack: Redis + PostgreSQL + all-in-one. API veritabani icin varsayilan:
+#   DOCKER_DATABASE_URL (bos ise) -> postgres servisindeki agentbase kullanicisi.
+# Harici PostgreSQL kullanacaksan proje kokundeki .env veya ortamda DOCKER_DATABASE_URL ayarla.
 services:
   agent-base-allinone:
     container_name: agent-base-allinone
@@ -29,8 +29,8 @@ services:
       # asla ${R2_...:-} ile burada verme: kok .env'de yoksa bos string env_file'i ezer.
       MEDIA_ROOT: /data/media
       MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost:8080}
-      # agent-base-api/.env icindeki 127.0.0.1 MySQL konteynerde calismaz; compose varsayilanini kullan.
-      DATABASE_URL: ${DOCKER_DATABASE_URL:-mysql+pymysql://agentbase:agentbase_pass@mysql:3306/agentbase}
+      # agent-base-api/.env icindeki 127.0.0.1 PostgreSQL konteynerde calismaz; compose varsayilanini kullan.
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql+psycopg2://agentbase:agentbase_pass@postgres:5432/agentbase}
       # Tur 4 — LangGraph + structured rule engine
       # listener / workflow_worker / task_executor supervisord altında
       # uvicorn ile aynı container'da çalışıyor.
@@ -45,7 +45,7 @@ services:
     ports:
       - "${WEB_PORT:-8080}:80"
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -57,22 +57,21 @@ services:
       start_period: 60s
     restart: unless-stopped
 
-  mysql:
-    image: mysql:8.0
-    container_name: agent-base-mysql
+  postgres:
+    image: postgres:16-alpine
+    container_name: agent-base-postgres
     environment:
-      MYSQL_ROOT_PASSWORD: ${AGENTBASE_MYSQL_ROOT_PASSWORD:-agentbase_root}
-      MYSQL_DATABASE: ${AGENTBASE_MYSQL_DATABASE:-agentbase}
-      MYSQL_USER: ${AGENTBASE_MYSQL_USER:-agentbase}
-      MYSQL_PASSWORD: ${AGENTBASE_MYSQL_PASSWORD:-agentbase_pass}
+      POSTGRES_DB: ${AGENTBASE_POSTGRES_DATABASE:-agentbase}
+      POSTGRES_USER: ${AGENTBASE_POSTGRES_USER:-agentbase}
+      POSTGRES_PASSWORD: ${AGENTBASE_POSTGRES_PASSWORD:-agentbase_pass}
     volumes:
-      - agent_base_mysql:/var/lib/mysql
+      - agent_base_postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" || exit 1"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 30
-      start_period: 40s
+      start_period: 20s
     restart: unless-stopped
 
   redis:
@@ -88,4 +87,4 @@ services:
 
 volumes:
   agent_base_media:
-  agent_base_mysql:
+  agent_base_postgres:
