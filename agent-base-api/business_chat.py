@@ -913,6 +913,38 @@ def _one_shot_run(question: str, user_id: int) -> dict | None:
     }
 
 
+def _compose_context_text(pg_ctx: dict) -> str:
+    """LLM'e geçecek context_text'i pg_context'ten üret.
+
+    Üç dal: (1) gerçek SQL hatası → "icat etme" uyarısı, (2) başarılı veri →
+    veri bloğu, (3) başarılı ama 0 satır → "kayıt yok". Hata ve boş-sonuç
+    aynı mesajla birleşmez.
+    """
+    if not pg_ctx or pg_ctx.get("type") != "smart_context":
+        return ""
+
+    if pg_ctx.get("is_error") or pg_ctx.get("error"):
+        return (
+            "(Bu soruyu işlerken teknik bir SQL hatası oluştu. "
+            "Kullanıcıya 'bu soruyu işlerken teknik bir sorun oluştu, "
+            "tekrar dener misin' gibi nazik bir cevap ver. "
+            "SAYI veya VERİ İCAT ETME. 'Kayıt yok' DEME — bu farklı bir durum.)"
+        )
+
+    raw_text = pg_ctx.get("text") or ""
+    row_count = pg_ctx.get("row_count", 0)
+    if raw_text and row_count > 0:
+        desc = pg_ctx.get("description") or ""
+        return (
+            f"DB VERİSİ ({desc}):\n"
+            f"{raw_text}\n"
+            f"(Toplam {row_count} kayıt — bu sayıları ve değerleri aynen kullan)"
+        )
+    if row_count == 0:
+        return "(Bu sorgu için veritabanında kayıt bulunamadı.)"
+    return ""
+
+
 def answer_question(
     question: str,
     user_id: int = 1,
@@ -1072,26 +1104,13 @@ def answer_question(
     if past_summaries:
         full_system_prompt += f"\n\nÖnceki konuşmalardan:\n{past_summaries}"
 
-    # DB'den gelen veriyi güçlü etiketle — LLM "veri yok" demesin
-    context_text = ""
     pg_ctx = retrieval_data.get("pg_context") or {}
-    if pg_ctx.get("type") == "smart_context":
-        raw_text = pg_ctx.get("text") or ""
-        row_count = pg_ctx.get("row_count", 0)
-        if raw_text and row_count > 0:
-            desc = pg_ctx.get("description") or ""
-            context_text = (
-                f"DB VERİSİ ({desc}):\n"
-                f"{raw_text}\n"
-                f"(Toplam {row_count} kayıt — bu sayıları ve değerleri aynen kullan)"
-            )
-        elif row_count == 0:
-            context_text = "(Bu sorgu için veritabanında kayıt bulunamadı.)"
+    context_text = _compose_context_text(pg_ctx)
+    row_count = pg_ctx.get("row_count", 0)
+    is_sql_error = bool(pg_ctx.get("is_error") or pg_ctx.get("error"))
 
-    # Mod tespiti: history'de bu veri zaten var mı?
-    # Yoksa yeni veri (context_text dolu) ya da sohbet modu
     _mode_label = "MOD_1_SOHBET"
-    if context_text and row_count > 0:
+    if context_text and row_count > 0 and not is_sql_error:
         _mode_label = "MOD_2_VERI" if row_count <= 10 else "MOD_3_KARMA"
 
     # ----- OpenAI native chat history -----

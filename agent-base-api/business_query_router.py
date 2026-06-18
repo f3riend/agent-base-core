@@ -107,6 +107,7 @@ def route(
                 "description": result.get("description", ""),
                 "row_count": row_count,
                 "error": result.get("error"),
+                "is_error": bool(result.get("is_error")),
             },
             "op_context": {},
             "model_override": model,

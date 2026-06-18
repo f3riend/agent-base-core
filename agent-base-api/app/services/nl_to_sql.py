@@ -628,14 +628,16 @@ def nl_to_sql(
         return {
             "rows": [], "formatted": "(Bu sorgu için kayıt bulunamadı.)",
             "sql": sql, "description": description,
-            "model_tier": model_tier, "row_count": 0, "error": None,
+            "model_tier": model_tier, "row_count": 0,
+            "error": None, "is_error": False,
         }
 
     return {
         "rows": rows,
         "formatted": _format_rows(rows, list(rows[0].keys())),
         "sql": sql, "description": description,
-        "model_tier": model_tier, "row_count": len(rows), "error": None,
+        "model_tier": model_tier, "row_count": len(rows),
+        "error": None, "is_error": False,
     }
 
 
@@ -696,5 +698,6 @@ def _empty(reason: str) -> dict[str, Any]:
     return {
         "rows": [], "formatted": "",
         "sql": "", "description": reason,
-        "model_tier": "mini", "row_count": 0, "error": reason,
+        "model_tier": "mini", "row_count": 0,
+        "error": reason, "is_error": True,
     }
