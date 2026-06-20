@@ -8,7 +8,28 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from typing import Optional
+
+
+_PRODUCT_PRONOUN_RE = re.compile(r"\bbu\s+ürün(\w*)\b", flags=re.IGNORECASE)
+
+
+def _rewrite_pronouns(question: str, entity_label: str) -> tuple[str, bool]:
+    """'bu ürün*' kalıplarını entity_label ile ikame eder.
+
+    Suffix korunur — 'bu ürünün' → '"Anker Soundcore" ürününün'. Tek satır rewrite
+    Türkçe gramerinin tamamını çözmez ama nl_to_sql şablon eşleştirmesi için
+    yeterli; LLM kalan suffix'leri context'ten anlar.
+    """
+    if not entity_label or not question:
+        return question, False
+    safe_label = entity_label.replace('"', "'")
+    new_q, n = _PRODUCT_PRONOUN_RE.subn(
+        lambda m: f'"{safe_label}" ürün{m.group(1)}',
+        question,
+    )
+    return new_q, n > 0
 
 
 def route(
@@ -16,6 +37,8 @@ def route(
     *,
     user_id: int = 1,
     active_entity_label: str = "",
+    active_entity_id: str | None = None,
+    active_entity_type: str | None = None,
     session_id: str | None = None,
     **extra,
 ) -> Optional[dict]:
@@ -47,6 +70,24 @@ def route(
     # 2) @mention parse
     mention = parse_mention(question)
     clean_q = mention.clean_query or question
+
+    # 2b) Pronoun rewriting — "bu ürün" referansı varsa active_entity ile ikame.
+    # Rewrite yapıldıysa "bu turun aktif entity'si" tartışmasız önceki prev_active.
+    # business_chat ikinci bir lookup yapmasın diye resolved_entity_* alanları
+    # data payload'una atomik şekilde konur — desync engellenir.
+    rewritten_q, was_rewritten = _rewrite_pronouns(clean_q, active_entity_label or "")
+    resolved_entity_label: str | None = None
+    resolved_entity_id: str | None = None
+    resolved_entity_type: str | None = None
+    if was_rewritten:
+        print(
+            f"[ROUTER] pronoun rewrite: {clean_q!r} → {rewritten_q!r} "
+            f"(active_entity={active_entity_label!r})"
+        )
+        clean_q = rewritten_q
+        resolved_entity_label = active_entity_label
+        resolved_entity_id = active_entity_id
+        resolved_entity_type = active_entity_type or "product"
 
     # 3) Erişim kontrolü
     store_ids = resolve_scope_to_store_ids(mention, user_id, is_admin)
@@ -114,6 +155,12 @@ def route(
             "from_cache": False,
             "mention_scope": mention.scope,
             "store_ids": store_ids,
+            "effective_question": clean_q,
+            "pronoun_rewritten": was_rewritten,
+            "active_entity_label": active_entity_label or None,
+            "resolved_entity_label": resolved_entity_label,
+            "resolved_entity_id": resolved_entity_id,
+            "resolved_entity_type": resolved_entity_type,
         },
         "recommendations": [],
         "confidence": 0.9,

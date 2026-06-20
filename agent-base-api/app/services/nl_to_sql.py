@@ -46,6 +46,7 @@ _SCHEMA_JSON = {
         "filter": "JOIN products p ON p.id = product_id WHERE p.store_id = ANY(CAST(:store_ids AS uuid[]))",
         "use_for": ["yorumlar", "müşteri görüşleri", "ürün puanı", "memnuniyet"],
         "no_direct_store_filter": True,
+        "warning": "rating kolonunun AVG'ı GERÇEK ürün puanı DEĞİLDİR — sadece elimizdeki metinli yorumların alt kümesi. Ürün puanı/rating için DAİMA products.rating + products.rating_count kullan.",
     },
     "product_price_history": {
         "columns": ["id", "product_id", "old_price", "new_price", "change_reason", "changed_at"],
@@ -420,6 +421,11 @@ ZORUNLU KURALLAR:
 9. UUID karşılaştırma: MUTLAKA CAST(:store_ids AS uuid[]) — string değil.
 10. Kolon aliasları Türkçe: AS kar, AS marj_yuzde, AS stok_adeti vb.
 11. Bir tabloda "YOKTUR" yazıyorsa o kolonu KESİNLİKLE kullanma.
+12. Ürün puanı / rating / "kaç puan" sorulduğunda SADECE şu kalıbı kullan:
+    SELECT name, rating, rating_count FROM products
+    WHERE <ürün adı/marka filtresi> AND store_id = ANY(CAST(:store_ids AS uuid[]))
+    products.rating kanonik puandır. rating'i başka bir sayıyla ÇARPMA/BÖLME,
+    AVG/SUM/GROUP BY KULLANMA. product_reviews.rating'in ortalamasını da ALMA.
 
 SADECE JSON döndür:
 {{
@@ -470,6 +476,65 @@ def _ensure_limit(sql: str) -> str:
 # ---------------------------------------------------------------------------
 # Şablon eşleştirici
 # ---------------------------------------------------------------------------
+
+_TEMPLATE_OPTIONS = "\n".join(
+    f'  - {k}: {t["description"]}' for k, t in _TEMPLATES.items()
+)
+
+_ROUTER_PREAMBLE = f"""
+
+ÖNCE ŞABLON KARARI:
+Aşağıdaki hazır (test edilmiş) şablonlardan biri soruya TAM uyuyorsa onu seç.
+Şablonlar MAĞAZA GENELİ veri içindir — soru belirli tek bir ürünü/markayı
+adlandırıyorsa (tek ürünün fiyatı/stoğu/yorumu gibi) şablon UYMAZ, custom SQL yaz.
+
+HAZIR ŞABLONLAR:
+{_TEMPLATE_OPTIONS}
+
+ÇIKTI:
+- Uygun şablon varsa SADECE: {{"template": "<anahtar>"}}
+- Uymuyorsa veya belirli ürün/marka adlandırılıyorsa custom SQL:
+  {{"sql": "SELECT ...", "description": "...", "model_tier": "mini"}}
+"""
+
+
+def _route_and_generate(question: str, key: str) -> tuple[str, str, str, str | None]:
+    """Tek LLM çağrısı: ya hazır şablonu seçer ya da custom SQL üretir.
+    Keyword/marka listesi YOK — her ürün/markayla ölçeklenir.
+    Döner: (sql, description, model_tier, template_key|None)."""
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=key, timeout=12)
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT + _ROUTER_PREAMBLE},
+                {"role": "user", "content": question},
+            ],
+            temperature=0,
+            max_tokens=500,
+            response_format={"type": "json_object"},
+        )
+        raw = (completion.choices[0].message.content or "").strip()
+        if not raw:
+            return "", "LLM boş döndü.", "mini", None
+        parsed = json.loads(raw)
+        tkey = (parsed.get("template") or "").strip()
+        if tkey and tkey in _TEMPLATES:
+            t = _TEMPLATES[tkey]
+            print(f"[NL_TO_SQL] Şablon seçildi (LLM): {t['description']}")
+            return t["sql"].strip(), t["description"], "mini", tkey
+        return (
+            (parsed.get("sql") or "").strip(),
+            parsed.get("description") or "",
+            parsed.get("model_tier") or "mini",
+            None,
+        )
+    except Exception as exc:
+        print(f"[NL_TO_SQL] route_and_generate failed: {exc}")
+        return "", f"LLM hatası: {exc}", "mini", None
+
+
 def _match_template(question: str) -> dict | None:
     """Şablon eşleştir. Öncelik sırası önemli — spesifik şablonlar önce kontrol edilir."""
     q = question.lower()
@@ -576,19 +641,14 @@ def nl_to_sql(
         return _empty("API key yok.")
 
     # 1) Şablon eşleştir — varsa LLM'e gitme
-    template = _match_template(q)
-    if template:
-        sql = template["sql"].strip()
-        description = template["description"]
-        model_tier = "mini"
-        print(f"[NL_TO_SQL] Şablon kullanıldı: {description}")
-    else:
-        # 2) LLM'den SQL al
-        sql, description, model_tier = _llm_generate_sql(q, key)
-        if not sql:
-            return _empty(description)
+    # 1) Tek LLM çağrısı — ya hazır şablonu seçer ya da custom SQL üretir.
+    #    Keyword/marka listesi YOK; her ürün/markayla ölçeklenir.
+    sql, description, model_tier, used_template = _route_and_generate(q, key)
+    if not sql:
+        return _empty(description)
 
-        # 3) Doğrulama — hata varsa LLM'e bir kez daha dene
+    # 2) Sadece custom SQL doğrulanır (şablonlar zaten test edilmiş).
+    if not used_template:
         errors = _validate_sql(sql)
         if errors:
             print(f"[NL_TO_SQL] Doğrulama hatası: {errors} — LLM'e geri gönderiliyor")
@@ -613,16 +673,36 @@ def nl_to_sql(
         "user_id": int(user_id),
     }
 
-    # 6) Çalıştır
-    try:
-        from app.core.database import SessionLocal
-        with SessionLocal() as session:
-            result = session.execute(text(sql), params)
-            cols = list(result.keys())
-            rows = [dict(zip(cols, row)) for row in result.fetchall()]
-    except Exception as exc:
-        print(f"[NL_TO_SQL] SQL failed: {exc}\nSQL: {sql}")
-        return _empty(f"Sorgu hatası: {exc}")
+    # 6) Çalıştır — execution hatası olursa custom SQL'i bir kez LLM'e düzelttir
+    from app.core.database import SessionLocal
+    rows = None
+    for attempt in range(2):
+        try:
+            with SessionLocal() as session:
+                result = session.execute(text(sql), params)
+                cols = list(result.keys())
+                rows = [dict(zip(cols, row)) for row in result.fetchall()]
+            break
+        except Exception as exc:
+            print(f"[NL_TO_SQL] SQL failed (deneme {attempt+1}): {exc}")
+            # Şablonlar test edilmiştir; yalnızca custom SQL'i ve yalnızca ilk denemede düzelt
+            if attempt == 0 and not used_template:
+                fix_sql, fix_desc, fix_tier = _llm_generate_sql(
+                    f"{q}\n\nÖnceki SQL şu PostgreSQL hatasını verdi:\n{exc}\n"
+                    f"Hatalı SQL:\n{sql}\n"
+                    f"Bu hatayı DÜZELT. Kural: GROUP BY kullanıyorsan SELECT'teki "
+                    f"aggregate olmayan TÜM kolonları GROUP BY'a ekle; tek kayıt için "
+                    f"GROUP BY'a gerek yoksa hiç kullanma.", key
+                )
+                if fix_sql and _is_safe(fix_sql):
+                    sql = _ensure_limit(_ensure_uuid_cast(fix_sql))
+                    description = fix_desc or description
+                    model_tier = fix_tier or model_tier
+                    continue
+            return _empty(f"Sorgu hatası: {exc}")
+
+    if rows is None:
+        return _empty("Sorgu çalıştırılamadı.")
 
     if not rows:
         return {

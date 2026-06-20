@@ -1,0 +1,998 @@
+{
+  "urun": {
+    "name": "Pantene Pro-V E Vitaminli Keratin Koruyucu Yoğun Onarıcı Saç Bakım Yağı 100 Ml",
+    "brand": "Pantene",
+    "price": 267.75,
+    "rating": 4.1,
+    "rating_count": 218,
+    "category": null,
+    "description": "Hacim: 100 ml | Etki: Güçlendirici | Saç Tipi: Tüm Saç Tipleri | Refill: Hayır",
+    "images": [
+      "https://cdn.dsmcdn.com/mnresize/1200/1800/ty1000062/product/media/images/prod/PIM/20260122/10/7113c51e-2ccd-4686-8612-db7b3375d207/1_org_zoom.jpg",
+      "https://cdn.dsmcdn.com/mnresize/1200/1800/ty1000061/product/media/images/prod/PIM/20260122/10/201be24b-bf1f-4301-a64a-3d1e4eaeb340/1_org_zoom.jpg",
+      "https://cdn.dsmcdn.com/mnresize/1200/1800/ty1000076/product/media/images/prod/PIM/20260122/10/338abcff-4e0b-45d0-8d44-e92085a2d66f/1_org_zoom.jpg",
+      "https://cdn.dsmcdn.com/mnresize/1200/1800/ty1000061/product/media/images/prod/PIM/20260122/10/9e686e1e-d27c-4481-8070-f2c1881ff969/1_org_zoom.jpg",
+      "https://cdn.dsmcdn.com/mnresize/1200/1800/ty1000075/product/media/images/prod/PIM/20260122/10/b6b5490b-9321-4dd1-8c12-d2a60e121a01/1_org_zoom.jpg",
+      "https://cdn.dsmcdn.com/mnresize/1200/1800/ty1000061/product/media/images/prod/PIM/20260122/10/00b750ca-6384-41fb-8d4a-6955f93d1a15/1_org_zoom.jpg",
+      "https://cdn.dsmcdn.com/mnresize/1200/1800/ty1000075/product/media/images/prod/PIM/20260122/10/6a360a89-6815-4945-9fb9-6818abaef352/1_org_zoom.jpg",
+      "https://cdn.dsmcdn.com/mnresize/1200/1800/ty1000061/product/media/images/prod/PIM/20260122/10/ba208728-ce74-47ba-b977-3ef153b6792b/1_org_zoom.jpg"
+    ],
+    "source_url": "https://www.trendyol.com/pantene/pro-v-e-vitaminli-keratin-koruyucu-yogun-onarici-sac-bakim-yagi-100-ml-p-900428276"
+  },
+  "yorumlar": [
+    {
+      "kullanici": "**** ****",
+      "tarih": "17 Şubat 2026",
+      "metin": "Gerçekten ipeksi bir görünüş sağlıyor ve parlak ve yumuşaklık sağlıyor hep kullanıyorum tavsiye ederim",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1768435207133/img/2019922/2021916/2036871/900428276/223867722-1771278403301.jpeg",
+      "rating": 5
+    },
+    {
+      "kullanici": "C** Ç**",
+      "tarih": "26 Ocak 2026",
+      "metin": "sağlam geldi. kokusu dehşet güzel çok seviyorum",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1768435207133/img/2019922/2020919/2045844/900428276/42198448-1769421879551.jpeg",
+      "rating": 5
+    },
+    {
+      "kullanici": "Sibel D.",
+      "tarih": "21 Ocak 2026",
+      "metin": "Bayıldım kokusu çok güzel yumuşacık yapıyor saçları",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1768435207133/img/2019922/2020919/2040859/900428276/106278888-1768994385430.jpeg",
+      "rating": 5
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "22 Ağustos 2025",
+      "metin": "ürün çok güzel,bir fıs saça yeterli bile.biraz yağlı gibi geldi ama elimde bile nem bıraktı,saça çok yarayacağını düşünüyorum,kesinlikle mükemmel bir ürün.. tes",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media-migrated_1755700289924/img/2018925/2026901/2040859/900428276/95965965-1755848789386.jpeg",
+      "rating": 5
+    },
+    {
+      "kullanici": "Fulya S.",
+      "tarih": "23 Ağustos 2025",
+      "metin": "mükemmel bir ürün saçı yumuşak tutması kokusu saça parlaklık vermesi 10 numara alın Stok yapın",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "Z** I**",
+      "tarih": "17 Mart 2026",
+      "metin": "Kokusu gerçekten mükemmel. Sacin sağlıklı ve parlak görünmesini sağlıyor ve yumuşak bir doku yaratıyor. Gerçekten güzel bir ürün oneririmmm",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "3 Eylül 2025",
+      "metin": "Harikaaa yağ özelliğini beğendim",
+      "fotograf": null,
+      "rating": 4
+    },
+    {
+      "kullanici": "C** Ş**",
+      "tarih": "11 Ağustos 2025",
+      "metin": "ürün güzel firmaya teşekkür ederim ilgilerinden dolayı",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "Fatma G.",
+      "tarih": "25 Aralık 2025",
+      "metin": "Her duş sonrası kullanıyorum saçlarımı yumuşacık yapıyor ve kokusu da çok hoş",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1762732810909/img/2018925/2030889/2043850/900428276/80922796-1766667628987.jpeg",
+      "rating": 4
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "13 Ekim 2025",
+      "metin": "çok güzel çok beğendim herkese tavsiye ederim ☺️",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "10 Aralık 2025",
+      "metin": "ya çok kötü sakın almayin elidor'u tavsiye ederim",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1762732810909/img/2018925/2030889/2028895/900428276/204651994-1765376594951.jpeg",
+      "rating": 5
+    },
+    {
+      "kullanici": "E** N** G**",
+      "tarih": "26 Şubat 2026",
+      "metin": "yıllardır kullandığım tek yağ harika",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "3 Eylül 2025",
+      "metin": "İlk defa kullandım gayet güzel",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media-migrated_1755700289924/img/2018925/2027898/2021916/900428276/197100218-1756920567723.jpeg",
+      "rating": 5
+    },
+    {
+      "kullanici": "Zeliha A.",
+      "tarih": "22 Nisan 2026",
+      "metin": "Yıllardır kullandığım vazgeçilmezim paketleme güzel kargo hızlı teşekkür ederim",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1768435207133/img/2019922/2023910/2041856/900428276/16433832-1776844752896.jpeg",
+      "rating": 5
+    },
+    {
+      "kullanici": "M** D**",
+      "tarih": "13 Ağustos 2025",
+      "metin": "İndirimde görünce aldım.  Benim saçlarıma çok iyi geldi.",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "T** Ö**",
+      "tarih": "20 Nisan 2026",
+      "metin": "Her saç yıkama sonrası mutlaka kullanırım saçım hacimli kulanınca düzgün bir şekil veriyor  kısacası çok memnunum 🥰",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "m** v**",
+      "tarih": "28 Ağustos 2025",
+      "metin": "kargo hızlı ve özenliydi satıcıya teşekkürler",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media-migrated_1755700289924/img/2018925/2026901/2046841/900428276/111844218-1756376388783.jpeg",
+      "rating": 5
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "23 Ekim 2025",
+      "metin": "2 tane geldi çok teşekkür",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "5 Eylül 2025",
+      "metin": "Saçlarımı yumuşacık yaptı stok yapıyorum",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "G** C**",
+      "tarih": "2 Şubat 2026",
+      "metin": "Çok güzel kargolanmış teşekkür ederim",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1768435207133/img/2019922/2021916/2021916/900428276/35219646-1770017638523.jpeg",
+      "rating": 5
+    },
+    {
+      "kullanici": "N** H**",
+      "tarih": "7 Ocak 2026",
+      "metin": "Beğenerek kullanıyorum",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "Sena A.",
+      "tarih": "18 Ocak 2026",
+      "metin": "Kokusuna bayılıyorumm",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "Ü** B**",
+      "tarih": "19 Şubat 2026",
+      "metin": "tavsiye üzerine aldım",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "7 Ocak 2026",
+      "metin": "övuldugu kadar var",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "31 Ekim 2025",
+      "metin": "sağlam geldi paketleme iyiydi işe yariyor",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "A** G**",
+      "tarih": "9 Kasım 2025",
+      "metin": "Güzel başarılı",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "4 Kasım 2025",
+      "metin": "beğendim çok iyi",
+      "fotograf": null,
+      "rating": 4
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "13 Mart 2026",
+      "metin": "Sorunsuz ve hızlı gönderi için teşekkür ederim :)",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "S** G**",
+      "tarih": "25 Nisan 2026",
+      "metin": "sürekli kullandığım ürün tavsiye",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "k** B**",
+      "tarih": "27 Ağustos 2025",
+      "metin": "Saçlara çok güzel oluyor",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "M** U**",
+      "tarih": "10 Ocak 2026",
+      "metin": "çok beğendim",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "Yasemin Ü. K.",
+      "tarih": "17 Haziran 2026",
+      "metin": "çok iyi bir yap",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "GÜLER A.",
+      "tarih": "8 Haziran 2026",
+      "metin": "üründe bir parmaklık eksiklik vardı iadesi ile uğraşmak istemediğim için kullandım ama resmen kullanılmış ürün geldi",
+      "fotograf": null,
+      "rating": 1
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "6 Haziran 2026",
+      "metin": "Bence yapısı biraz sılı kukusu ve etkisi güzel ama keşke argan özlüsünü alsaydım.",
+      "fotograf": null,
+      "rating": 3
+    },
+    {
+      "kullanici": "M** G**",
+      "tarih": "1 Haziran 2026",
+      "metin": "Ürün sahte ürün Allah’tan korkmazlar ayıp hesabı ağır yakanıza diğer tarafta yapışacağım günahlarımdan vereceğim inşallah. Orjinal olan elle tuttuğum.",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1777680012294/img/2019922/2025904/2020919/900428276/15245920-1780327188017.jpeg",
+      "rating": 1
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "29 Mayıs 2026",
+      "metin": "Çok güzel.",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "E** A**",
+      "tarih": "20 Mayıs 2026",
+      "metin": "Ürün sürekli kullandığım bir üründü ancak bu satıcıdan aldığım üründe kalıntı bırakan ağır bi yağ hissi oluştu. Saçlarımı da sertleştirdi. Açıkçası gönderilen ü",
+      "fotograf": null,
+      "rating": 1
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "19 Mayıs 2026",
+      "metin": "İçine hep su doldurmuslar almayın kokusu bile gelmiyor sudan",
+      "fotograf": null,
+      "rating": 1
+    },
+    {
+      "kullanici": "Ayşegül Ş.",
+      "tarih": "19 Mayıs 2026",
+      "metin": "gayet güzel beğendim",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "C** K**",
+      "tarih": "18 Mayıs 2026",
+      "metin": "Hediyeniz için teşekkür ederim çok mutlu oldum",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1777680012294/img/2019922/2024907/2037868/900428276/25544571-1779089404951.jpeg",
+      "rating": 5
+    },
+    {
+      "kullanici": "Tesnim K.",
+      "tarih": "18 Mayıs 2026",
+      "metin": "Guzel urun",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "S** K**",
+      "tarih": "16 Mayıs 2026",
+      "metin": "Kendinizi zeki sanıp pantene adını kullanarak sahte ürün üretiyorsunuz ilk defa internet üzerinden almak istedim elimdeki orijinal ürünle arasında dağlar kadar",
+      "fotograf": null,
+      "rating": 1
+    },
+    {
+      "kullanici": "Nilgün G.",
+      "tarih": "15 Mayıs 2026",
+      "metin": "saçlarımın sağlıklı uzayıp parıldaması için harika bir ürün. paketleme özenliydi satıcıya teşekkür ederim 💐",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "14 Mayıs 2026",
+      "metin": "Ürün satici kaynakli özensiz paketleme ve kesinlikle orjinal ürün değil yarisi kullanilmis vede sikma kapagi calismiyor geldi iade trendyola guvenmesem inanin b",
+      "fotograf": null,
+      "rating": 1
+    },
+    {
+      "kullanici": "H** Ç**",
+      "tarih": "14 Mayıs 2026",
+      "metin": "Ürün sahte sakın almayın",
+      "fotograf": null,
+      "rating": 1
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "13 Mayıs 2026",
+      "metin": "pantene saç yağını yıllardır kullanıyorum ve çok severim ama resmen sahte ürün göndermişler paketlemesi yapısı kokusu gerçeğiyle alakası yok.",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1777680012294/img/2019922/2024907/2032883/900428276/28040933-1778695486661.jpeg",
+      "rating": 1
+    },
+    {
+      "kullanici": "G** Ş**",
+      "tarih": "12 Mayıs 2026",
+      "metin": "Fiyat göre iyi",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "11 Mayıs 2026",
+      "metin": "ineğim için almıştım mesajları çok güzel parlıyor artık",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1777680012294/img/2019922/2024907/2030889/900428276/202095099-1778498559108.jpeg",
+      "rating": 5
+    },
+    {
+      "kullanici": "R** K**",
+      "tarih": "10 Mayıs 2026",
+      "metin": "Ürünler sahte. Kimsenin almasını tavsiye etmiyorum. Şirket hakkında yasal işlem başlatacağım",
+      "fotograf": null,
+      "rating": 1
+    },
+    {
+      "kullanici": "s** ı**",
+      "tarih": "9 Mayıs 2026",
+      "metin": "Devamlı kullanıp aldığım bi ürün ilk defam burdan aldım ve tam  dolu deyil başkasının kulanıp geri gönderdi galiba bunun yarısı nerde pakede paktım pakedede akm",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1777680012294/img/2019922/2024907/2028895/900428276/107859750-1778319836163.jpeg",
+      "rating": 2
+    },
+    {
+      "kullanici": "T** T**",
+      "tarih": "8 Mayıs 2026",
+      "metin": "İçine şekerli su ve yağ karıştırmışsınız saçlarım mahvoldu",
+      "fotograf": null,
+      "rating": 1
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "30 Nisan 2026",
+      "metin": "ÜRÜN ÇOK KÖTÜ SAÇI SERTLEŞTİRİYOR JÖLE SÜRMÜŞ GİBİ AYRICA YAĞ GİBİDE DEĞİL BİR ÖNCEKİ YAĞIMI KULLANDIKTAN SONRA ELİMDEN ÇIKSIN DİYE BIKAC DEFA YIKAMAM GEREKIRKE",
+      "fotograf": null,
+      "rating": 1
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "30 Nisan 2026",
+      "metin": "çok güzel yumuşacık elimede çok erken geçti ❤️",
+      "fotograf": null,
+      "rating": 4
+    },
+    {
+      "kullanici": "s** b**",
+      "tarih": "16 Mart 2026",
+      "metin": "güzel ürün alınır",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "Y** B**",
+      "tarih": "10 Aralık 2025",
+      "metin": "Henüz kullanmadım ama yorumları güzel olduğu için aldım umarım memnun kalırım.",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1762732810909/img/2018925/2030889/2028895/900428276/18892708-1765396111318.jpeg",
+      "rating": 5
+    },
+    {
+      "kullanici": "P** G**",
+      "tarih": "27 Ekim 2025",
+      "metin": "teşekkürler",
+      "fotograf": null,
+      "rating": 3
+    },
+    {
+      "kullanici": "E** A**",
+      "tarih": "5 Şubat 2026",
+      "metin": "Ürünler hızlı geldi teşekkür ederim",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "s** b**",
+      "tarih": "13 Aralık 2025",
+      "metin": "Paketleme,kargolama süresi ve ürün kalitesi harika.",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "6 Nisan 2026",
+      "metin": "Çok gğzelll",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1768435207133/img/2019922/2023910/2025904/900428276/158273718-1775481425185.jpeg",
+      "rating": 5
+    },
+    {
+      "kullanici": "Şeyma C.",
+      "tarih": "19 Aralık 2025",
+      "metin": "Güzel begendimmm",
+      "fotograf": null,
+      "rating": 3
+    },
+    {
+      "kullanici": "N** S** T**",
+      "tarih": "27 Ocak 2026",
+      "metin": "ürünün kargo teslimatı zamanindaydii✨saçları en başta yağlı hissettiriyor fakat sonradan saçi müthiş nemlendiriyor✨süpeeerrr✨",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1768435207133/img/2019922/2020919/2046841/900428276/159050183-1769530964526.jpeg",
+      "rating": 5
+    },
+    {
+      "kullanici": "a** d**",
+      "tarih": "31 Ekim 2025",
+      "metin": "sahane otesi bisey kizimin saclari boyadan dolayi kuru ve yipranmisti ikinci kullanimda farketti",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "S** K**",
+      "tarih": "15 Ocak 2026",
+      "metin": "Saçları gerçekten koruyor ve güçlendiriyor saç bakımımda ilk sırada değilse de ikinci sırada falan",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "N** O** D**",
+      "tarih": "18 Şubat 2026",
+      "metin": "Uygun fiyat güvenilir satıcı",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "Ş** k**",
+      "tarih": "29 Kasım 2025",
+      "metin": "Severek kullanıyorum",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "B** G**",
+      "tarih": "23 Ocak 2026",
+      "metin": "sağlam geldi tam dolu kıvamı da yoğun duruyor",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1768435207133/img/2019922/2020919/2042853/900428276/9546750-1769196466049.jpeg",
+      "rating": 5
+    },
+    {
+      "kullanici": "Y** S**",
+      "tarih": "16 Ekim 2025",
+      "metin": "Teşekkürler",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media-migrated_1755700289924/img/2018925/2028895/2034877/900428276/99790923-1760613335634.jpeg",
+      "rating": 5
+    },
+    {
+      "kullanici": "S** P**",
+      "tarih": "20 Ağustos 2025",
+      "metin": "Mis gibi kokuyor",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "S** G**",
+      "tarih": "16 Nisan 2026",
+      "metin": "Duştan sonra kullanıyorum saç uçlarım yumuşacık oldu",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "K** K**",
+      "tarih": "20 Nisan 2026",
+      "metin": "He r zaman kullandığım için. Hızlı teslimat için teşekkür ediyorum",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "B** Y**",
+      "tarih": "6 Kasım 2025",
+      "metin": "Bu markanın saç yağı dışında başka yağ kullanamıyorum çok hafif ve yumuşak oluyor",
+      "fotograf": null,
+      "rating": 4
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "15 Şubat 2026",
+      "metin": "her kullandığım bir ürün paketleme ve kargo ile ilgili bir sorun yok sağlam açılmamış bir şekilde geliyor",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "v**",
+      "tarih": "29 Aralık 2025",
+      "metin": "Stoklanacak bi ürün",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "Dilan K.",
+      "tarih": "24 Nisan 2026",
+      "metin": "Çok güzel inşallah işe yarar",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "k** a**",
+      "tarih": "9 Nisan 2026",
+      "metin": "Gayet korunaklı bir şekilde geldi",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1768435207133/img/2019922/2023910/2028895/900428276/10423925-1775750389365.jpeg",
+      "rating": 5
+    },
+    {
+      "kullanici": "T** Ö**",
+      "tarih": "21 Şubat 2026",
+      "metin": "Ürünün orjinalliğinden en şüphe etmiştim fakat ürün sahtae değil rahatlıkla ala bilirsiniz karga da çok hızlıydı  paketlenmesi de sağlam",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1768435207133/img/2019922/2021916/2040859/900428276/44740126-1771668859689.jpeg",
+      "rating": 5
+    },
+    {
+      "kullanici": "E** G**",
+      "tarih": "26 Nisan 2026",
+      "metin": "Uygun fiyatlı kaliteli ürün",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "N** K**",
+      "tarih": "13 Mart 2026",
+      "metin": "Hep stoklarım",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "d** a**",
+      "tarih": "2 Eylül 2025",
+      "metin": "yeni aldım bakalım",
+      "fotograf": null,
+      "rating": 4
+    },
+    {
+      "kullanici": "A** s** T**",
+      "tarih": "4 Eylül 2025",
+      "metin": "Yanlış ürün göndermişler. Tekrar iadeyle uğraşmak istemedim. Bundan sonra umarım daha dikkatli olursunuz.",
+      "fotograf": null,
+      "rating": 1
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "28 Ekim 2025",
+      "metin": "Tam dolu değil",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media-migrated_1755700289924/img/2018925/2028895/2046841/900428276/184654437-1761647719011.jpeg",
+      "rating": 1
+    },
+    {
+      "kullanici": "M** K**",
+      "tarih": "6 Şubat 2026",
+      "metin": "Yapay zekaya içeriğini gösterdim sordum ve saç için çok faydalı değil pek bir faydası yokmuş bu ürün alınmasa da olur bilginiz olsun sadece kokusu güzel kargo ö",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1768435207133/img/2019922/2021916/2025904/900428276/11891202-1770381107225.jpeg",
+      "rating": 4
+    },
+    {
+      "kullanici": "ö** a**",
+      "tarih": "9 Şubat 2026",
+      "metin": "güzele benziyo",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "B** B**",
+      "tarih": "4 Eylül 2025",
+      "metin": "Bana çok yoğun ve yağlı geldi saç tipine göre değişir ama güzel kokuyor.",
+      "fotograf": null,
+      "rating": 3
+    },
+    {
+      "kullanici": "h** A**",
+      "tarih": "5 Aralık 2025",
+      "metin": "daha kullanmadım",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1762732810909/img/2018925/2030889/2023910/900428276/175449932-1764883788158.jpeg",
+      "rating": 5
+    },
+    {
+      "kullanici": "G** A**",
+      "tarih": "31 Ocak 2026",
+      "metin": "Yeni keşfettim geç kalmışım",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "B** G**",
+      "tarih": "25 Eylül 2025",
+      "metin": "Kokusu kolonya gibi ,daha önce kullanmıştım ama su an alakasi yok orijinal ürünle",
+      "fotograf": null,
+      "rating": 1
+    },
+    {
+      "kullanici": "G** e**",
+      "tarih": "15 Nisan 2026",
+      "metin": "Kokusu güzel diyenler ne yaşıyor",
+      "fotograf": null,
+      "rating": 1
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "14 Eylül 2025",
+      "metin": "Bu nasıl ürün beni Anlayamadım bunu sürdüğüm zaman Saçım aşırı derecede yağlı görünüyor",
+      "fotograf": null,
+      "rating": 3
+    },
+    {
+      "kullanici": "N** K**",
+      "tarih": "1 Nisan 2026",
+      "metin": "İlk geldiğinde ağız kısmı baya eksik geldi kargoya da dökülmemişti kullanılıp geldiğini düşünüyorum",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1768435207133/img/2019922/2023910/2020919/900428276/30222649-1775028742802.jpeg",
+      "rating": 2
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "20 Nisan 2026",
+      "metin": "Kargodan teslim alıp hemen tekrar iade ettim kırım akmış bir ürün geldi",
+      "fotograf": null,
+      "rating": 1
+    },
+    {
+      "kullanici": "s** d**",
+      "tarih": "24 Kasım 2025",
+      "metin": "Üstte görünsün diye yüksek puan verdim yıllardır çok severek kullandığım bi ürün bu kez erimiş şeker li jel gibi geldi çöpe attım sahte ürün",
+      "fotograf": null,
+      "rating": 5
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "14 Ocak 2026",
+      "metin": "yeni yapısını hic beğenmedim sulandırılmış mi ne",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1762732810909/img/2019922/2020919/2033880/900428276/182708293-1768386055726.jpeg",
+      "rating": 2
+    },
+    {
+      "kullanici": "Z** D**",
+      "tarih": "24 Nisan 2026",
+      "metin": "şişe yarım geldi kazık begenmedim",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1768435207133/img/2019922/2023910/2043850/900428276/117366984-1777042470016.jpeg",
+      "rating": 2
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "5 Aralık 2025",
+      "metin": "P&g dan aldığım ürün evkiba diye bir yerden geldi",
+      "fotograf": null,
+      "rating": 1
+    },
+    {
+      "kullanici": "B** Y**",
+      "tarih": "20 Şubat 2026",
+      "metin": "Ben keratinli olan ürünü istedim argan yağlı olanı ürünü göndermişsiniz.",
+      "fotograf": null,
+      "rating": 1
+    },
+    {
+      "kullanici": "T** B**",
+      "tarih": "27 Ekim 2025",
+      "metin": "sahte  ürün orijinali ile alakası yok",
+      "fotograf": null,
+      "rating": 1
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "27 Eylül 2025",
+      "metin": "Su gibi orjinali ile alakası yok",
+      "fotograf": null,
+      "rating": 1
+    },
+    {
+      "kullanici": "**** ****",
+      "tarih": "23 Ekim 2025",
+      "metin": "Çok kötü... Hiç bir işe yaramıyor...",
+      "fotograf": null,
+      "rating": 1
+    },
+    {
+      "kullanici": "S** a**",
+      "tarih": "27 Ocak 2026",
+      "metin": "daha önce de aynı ürünü kullandım fakat bu kez içime pek sinmedi eski etkisi yok gibi",
+      "fotograf": "https://cdn.dsmcdn.com/mnresize/300/300/prod-product-review-media_1768435207133/img/2019922/2020919/2046841/900428276/15430926-1769505401719.jpeg",
+      "rating": 4
+    }
+  ],
+  "sss": [
+    {
+      "question": "Lütfen düzgün paketleyin dokulmesın",
+      "answer": "Ürünlerimiz özenli paketlemektedir efendim"
+    },
+    {
+      "question": "parfümlümü",
+      "answer": "Hayır efendim"
+    },
+    {
+      "question": "Duralanilirmi",
+      "answer": "Hayır efendim"
+    },
+    {
+      "question": "Saçlar için protein olarak kullanılır mı?",
+      "answer": "Merhaba,   Protein olarak kullanılmamaktadır. İyi günler dileriz-Müşteri hizmetleri-Betül"
+    },
+    {
+      "question": "kolay taramaya katkısı var mi",
+      "answer": "Merhaba, ürün saçın daha yumuşak hissedilmesine ve kolay taranmasına yardımcı olur. İyi günler dileriz. Müşteri hizmetleri-İrem"
+    },
+    {
+      "question": "nasıl kullanılmalı",
+      "answer": "Merhaba,  Temiz ya da nemli saça bir miktar ürünü avucunuza alarak saç uçlarından ortalarına kadar uygulayınız. Durulama gerektirmez. İyi günler dileriz- Müşteri Hizmetleri-Betül"
+    },
+    {
+      "question": "ürün ısı koruyucu mu",
+      "answer": "Evet efendim"
+    },
+    {
+      "question": "kivircik saça kullanilirmi",
+      "answer": "Merhaba kullanılabilir efendim"
+    },
+    {
+      "question": "ısı koruyucu özelliği var mı",
+      "answer": "Merhabalar, ürün saç bakım yağıdır. Isı koruyucu özelliği bulunmamaktadır. İyi günler dileriz. Müşteri hizmetleri-İrem"
+    },
+    {
+      "question": "Neden kendi satıcısı yok",
+      "answer": "bi bilgimiz yok"
+    },
+    {
+      "question": "mrb duştan sonramı kullaniliyor",
+      "answer": "Genellikle"
+    },
+    {
+      "question": "16 yaş için uygun mu",
+      "answer": "evet efendim"
+    },
+    {
+      "question": "Yumuşatır mı",
+      "answer": "Evet efendim"
+    },
+    {
+      "question": "durulamaya gerek var mı",
+      "answer": "Merhaba,     Temiz ya da nemli saça bir miktar ürünü avucunuza alarak saç uçlarından ortalarına kadar uygulayınız. Durulama gerektirmez. İyi günler dileriz- Müşteri Hizmetleri-Betül"
+    },
+    {
+      "question": "merhaba ürün son kulanım tarihi lütfen",
+      "answer": "Merhaba ambalaj üzerinde kapak açıldıktan sonra kulanım 12 ay olarak belirtilmektedir.iyi günler dileriz."
+    },
+    {
+      "question": "Merhaba duş aldıktan sonra ıslak saça uygulanırmı",
+      "answer": "Merhabalar efendim ürünün özelliklerini okumanızı öneririm"
+    },
+    {
+      "question": "nasıl kullanılıyor saç diplerine uygulanır mi",
+      "answer": "Merhaba,   Ürün saçın boy ve uçlarına uygulanarak kullanılır. Saç diplerine uygulanması önerilmez. Düzenli kullanımda saçın daha yumuşak ve parlak görünmesine yardımcı olur.   İyi günler dileriz. Müşteri hizmetleri-İrem"
+    },
+    {
+      "question": "kokusu nasıl",
+      "answer": "Merhaba,   Klasik panetene kokusuna sahiptir. Sağlıklı ve iyi günler dileriz-Müşteri hizmetleri-Betül"
+    },
+    {
+      "question": "Son kullanma tarihi nerde yazıyor",
+      "answer": "Merhaba ürün ambalajını inceleyebilirsiniz.iyi günler dileriz."
+    },
+    {
+      "question": "Argan yagimi",
+      "answer": "Merhaba efendim detaylı içerik listesi paylaşılmamıştır ürün özelikleri kısmından bilgi alabilirsiniz iyi günler dileriz."
+    },
+    {
+      "question": "sacımızı düzlestirdikten sonra kullanabilirniyiz",
+      "answer": "Merhaba,   Şekil verdikten sonra uygulayabilirsiniz. iyi günler dileriz-Müşteri hizmetleri-Betül"
+    },
+    {
+      "question": "ısıya karşı koruyucu etkisi varmıdır",
+      "answer": "Merhaba efendim  Bu sorunuz ile alakalı sağlıklı bilgi sahibi degilim efendim"
+    },
+    {
+      "question": "ısıya dayanıklı mi",
+      "answer": "Evet efendim"
+    },
+    {
+      "question": "Saci yumsaltirmi?",
+      "answer": "Merhabalar efendim evet yumuşatır"
+    },
+    {
+      "question": "Kokusu nasıl fresh mi yoksa ağır mı",
+      "answer": "Merhaba, Klasik pantene şampuan kokusudur. İyi günler dileriz-Müşteri hizmetleri-Betül"
+    },
+    {
+      "question": "saç uzatıyor mu",
+      "answer": "kullanım kısmında detaylı yer alır"
+    },
+    {
+      "question": "Saç diplerine uygulanıyor mu ?",
+      "answer": "Merhaba, saç uç ve boylarına uygulanması tavsiye edilmektedir. İyi günler dileriz. Müşteri Hizmetleri-Hatice"
+    },
+    {
+      "question": "kavgada kökünden kopan saçın çıkmasına yardımcı olur mu ya da direk çıkmasını sağlar mı ona göre alıcam",
+      "answer": "Merhaba, direkt olarak yeni saç oluşumunu hedeflememektedir. İyi günler dileriz. Müşteri Hizmetleri-Hatice"
+    },
+    {
+      "question": "Saç uçlarına kullanabilir mi banyodan sonra yatıştırması için",
+      "answer": "Merhaba,     Temiz ya da nemli saça bir miktar ürünü avucunuza alarak saç uçlarından ortalarına kadar uygulayınız. Durulama gerektirmez. İyi günler dileriz- Müşteri Hizmetleri-Betül"
+    },
+    {
+      "question": "merhaba ürünü sürdükten sonra  saçlarımızı kurutuyormuyuz",
+      "answer": "Merhaba,   Ürünü sürdükten sonra saçlarınızı kurutmanız gerekmez. Ürün hafif yapılı yağ  formundadır hızlıca emilir ve saçlarınızda ağırlık yapmaz. İyi günler dileriz-Müşteri Hizmetleri-Betül"
+    },
+    {
+      "question": "12 yaş kız cocuğa olur mu",
+      "answer": "Merhaba uygundur.iyi günler dileriz"
+    },
+    {
+      "question": "yüzde kaç parlaklık veriyor",
+      "answer": "Merhaba,   Oran olarak bilgi iletemiyoruz. İyi günler dileriz-Müşteri hizmetleri-Betül"
+    },
+    {
+      "question": "Bağ onarıcı mı ?",
+      "answer": "Evet efendim onarıcı"
+    },
+    {
+      "question": "Son kullanım tarihi nedir",
+      "answer": "10.27 dir efendim"
+    },
+    {
+      "question": "üründe tuz var mı",
+      "answer": "Merhaba,   Ürün içinde eser miktarda sülfat bulunmaktadır. İyi günler dileriz-Müşteri Hizmetleri-Betül"
+    },
+    {
+      "question": "erkeklerde kullanabilir mi",
+      "answer": "Evet tabi ki kullanabilir."
+    },
+    {
+      "question": "bu ürün duştan sonra sadece dipleri sürülüyor değil mi yoksa hepsine mi",
+      "answer": "Merhaba ürün nemli saça uç ve orta kısımlarına uygulayabilirsiniz.iyi günler dileriz."
+    },
+    {
+      "question": "kaç yaş için uygun",
+      "answer": "Merhaba yaş sınırı bulunmamaktadır iyi günler dileriz."
+    },
+    {
+      "question": "bu ürünü nasıl kullanacağını ederim",
+      "answer": "Tam olarak anlayamadık"
+    },
+    {
+      "question": "dökulmeye ıyı gelırmı",
+      "answer": "Merhaba, Dökülme önleyici özelliği bulunmamaktadır. İyi günler dileriz-Müşteri hizmetleri-Betül"
+    },
+    {
+      "question": "bu ne ise yarar",
+      "answer": "Merhaba saçları onarmaya yardımcı olur saçtakı yıpranmayı azaltır,saçlarınıza çok daha ışıltılı ve aydınlık bir görünüm kazandırır. iyi günler dileriz."
+    },
+    {
+      "question": "kullanımı nasıl ve 1 yıkamada ne kadar kullanılır",
+      "answer": "Temiz ya da nemli saca az bir miktar avucunuza alarak sac uclarindan ortalarina kadar uygulayabilirsiniz."
+    },
+    {
+      "question": "Ürünün son kullanma tarihini öğrenebilir miyim?",
+      "answer": "Merhabalar, Ürünlerimiz yeni üretim tarihli olup 2 yıl kullanım süresi bulunmaktadır.  İyi günler dileriz. -Müşteri Hizmetleri-Dilara"
+    },
+    {
+      "question": "saçı düz yapar mı",
+      "answer": "Merhaba ürün keratin etkisi bulunmaktadır iyi günler dileriz."
+    },
+    {
+      "question": "ürün saçı düzleştirmeden mi kullanılmalı düzleştirdikten sonra mı",
+      "answer": "Merhaba efendim ürün genellikle düzleştirmeden önce kullanılır saça termal koruma sağlamak ve düzleştirme sonrası saçın onarılmasına yardımcı olur önce kullanım sağlarsanız ısı koruması sağlar sonra kullanım için ise saç uçlarınıza çok az miktarda uygulayıp saça parlaklık verir ve elektriklenmeyi önleyecektir ☺️"
+    },
+    {
+      "question": "son kullanma tarihi nedir ürünün",
+      "answer": "2027 son tarih"
+    },
+    {
+      "question": "Merhaba sülfat paraben veya silikon içerir mi",
+      "answer": "Merhaba,   Ürün içeriğinde sülfat ve paraben  bulunmamaktadır. İyi günler dileriz-Müşteri hizmetleri-Betül"
+    },
+    {
+      "question": "Merhaba icerisinde ne var ? Hanqi yaglar ?",
+      "answer": "Merhaba detaylı içerik listesi paylaşılmamıştır ürün özelikleri kısmından bilgi alabilirsiniz iyi günler dileriz."
+    },
+    {
+      "question": "Kabarıklığı önler mi",
+      "answer": "Merhaba evet iyi günler dileriz."
+    },
+    {
+      "question": "Kullanımı nasıldır sürüp bekletelim mi nasıl yapacaz",
+      "answer": "Merhaba,  Temiz ya da nemli saça bir miktar ürünü avucunuza alarak saç uçlarından ortalarına kadar uygulayınız. Durulama gerektirmez. İyi günler dileriz-Evkiba Müşteri Hizmetleri-Hatice"
+    },
+    {
+      "question": "saç düzleştirici ile kullansam olur mu ısıya dayanıklı mi",
+      "answer": "Merhaba, ısı öncesinde kullanabilirsiniz. İyi günler dileriz"
+    },
+    {
+      "question": "keratinli saçlar için uygunmudur?keratini bozma ihtimali varmı?",
+      "answer": "Merhaba,  Pantene Pro-V E Vitaminli Keratin Koruyucu Yoğun Onarıcı Saç Bakım Yağı, keratin işlemi görmüş saçların bakımında kullanılabilir. Saçın daha yumuşak ve parlak görünmesine yardımcı olur. Ürün bir bakım yağı olduğundan, tek başına keratin uygulamasını bozması beklenmez. Ancak en doğru kullanım için keratin uygulamanızı yapan uzmanın önerilerini ve işleminizin bakım talimatlarını da dikkate almanızı tavsiye ederiz.  Sağlıklı günlerde kullanmanız dileğiyle. 🌸"
+    },
+    {
+      "question": "merhaba, etiketinde  alevlenir diyor, tutuşmayaneden olabilir.... şeklinde devam ediyor. sürdükten sonra saçımı düzleştiriciyle düzleştirirsemsaçıma zarar verir mi?",
+      "answer": "Düzleştirmeden önce yağ kullanı ı önerilmez"
+    },
+    {
+      "question": "gun içerisinde kullanılırmıı",
+      "answer": "Merhaba efendim günlük kullanıma uygundur."
+    },
+    {
+      "question": "merhabalar ürünün altında PROD 11/24 bu son kullanma tarihi mi acaba",
+      "answer": "Merhaba  Prod: 11/24 ibaresi üretim tarihini gösterir.  saç bakım yağlarının raf ömrü üretim tarihinden itibaren 3 yıldır."
+    },
+    {
+      "question": "Üründe direk keratin koruyucu yağ mı yazıyor bir siz satıyor gözüküyosunu",
+      "answer": "Merhaba,   Ürün içinde  keratin bulunmaktadır.  İyi  günler dileriz-Müşteri  hizmetleri-Betül"
+    },
+    {
+      "question": "Yağlı ve zayıf saçlar için uygunmudur",
+      "answer": "Merhaba saçın orta ve uç kısımlarına uygulayabilirsiniz.iyi günler dileriz."
+    },
+    {
+      "question": "saç dökülmesi olurmu",
+      "answer": "merhaba ürün dökülme yapmaz .İyi günler dileriz."
+    },
+    {
+      "question": "merhaba ürünü saçın tam olarak neresine sürüyoruz",
+      "answer": "Merhaba, saç diplerine ve saç yüzeyine uygulayabilirsiniz."
+    },
+    {
+      "question": "Merhaba benim sacim keratinli sac bu ürün sactaki ucusan tellere  ve sactaki kuruluga iyi geliyormu?",
+      "answer": "Merhaba düzenli kulanımda sonuç alabilirsiniz.iyi günler dileriz."
+    },
+    {
+      "question": "banyoo sonrası ıslak saça uygulanır mı",
+      "answer": "Merhaba nemli ve kuru saça uygulayabilirsiniz iyi günler dileriz"
+    },
+    {
+      "question": "merhaba keratinli saclar icin uygunmu keratini bozmaz dimi?",
+      "answer": "Merhaba keratinli saçlar uygundur.iyi günler dileriz"
+    },
+    {
+      "question": "merhaba tam bu rengi gelir değil mi bazen yeşil renkli olanını yolluyorlar",
+      "answer": "Merhaba,   Görselde yer alan  Pantene Yoğun Bakım Keratin Yağı gönderilmektedir. İyi günler dileriz-Müşteri Hizmetleri-Betül"
+    },
+    {
+      "question": "merhaba ürünü saçı düzleştirmeden önce mi kullanacağız sonramı",
+      "answer": "Merhaba ürünü saça işlem yapmadan önce ve yaptıktan sonra da kullanabilirsiniz. İyi günler dileriz."
+    },
+    {
+      "question": "Merhaba saçlarımı aşağı atınca çok kuru oluyor ve kötü gözüküyor işe yararmı",
+      "answer": "Tabi efendim saç uçlarından başlayarak ısı uygulamadan önce kullanırsanız kuruluğu alır"
+    },
+    {
+      "question": "ben keratin bakım diye bekliyordum Argan özlü yağ geldi zaten onu isteseydim onu alırdım ??!!",
+      "answer": "Merhaba yaşadığınız sorundan dolayı üzgünüz yoğnluk nedeni ile bir karışklık olmuş olabilir trendyol asistan yardımi ile satıcıyla iletişime geçip talep oluşturabilirsiniz.iyi günler dileriz."
+    },
+    {
+      "question": "Merhaba bu tür bakım yağları kaç günde bir kullanılmalı pek bilgim yokta",
+      "answer": "Her duştan sonra kullanabilirsiniz"
+    },
+    {
+      "question": "merhaba burda farkli pantene sac yagi var onlarin farki nedir",
+      "answer": "Merhaba her ürünün içeriği farklıdır ürün özelikleri kısmından bilgi alabilirsiniz.iyi günler dileriz."
+    }
+  ]
+}

@@ -127,20 +127,27 @@ def record_turn(
     model_used: str | None = None,
     tokens_used: int | None = None,
     cost_usd: float | None = None,
-    **_legacy,
+    primary_entity_type: str | None = None,
+    primary_entity_id: str | int | None = None,
+    primary_entity_label: str | None = None,
+    **_unused,
 ) -> int | None:
-    """Persist a turn. Returns turn id or None on failure."""
+    """Persist a turn — primary_entity_* alanları conversation_context()
+    tarafından "bu ürün" pronoun çözümünde kullanılır."""
     if not session_id:
         return None
+    entity_id_str = str(primary_entity_id) if primary_entity_id not in (None, "") else None
     try:
         with _session() as s:
             row = s.execute(
                 text(
                     "INSERT INTO bchat_turns ("
                     " session_id, user_id, question, answer, intent, "
-                    " model_used, tokens_used, cost_usd"
+                    " model_used, tokens_used, cost_usd, "
+                    " primary_entity_type, primary_entity_id, primary_entity_label"
                     ") VALUES ("
-                    " :sid, :uid, :q, :a, :intent, :model, :tokens, :cost"
+                    " :sid, :uid, :q, :a, :intent, :model, :tokens, :cost, "
+                    " :etype, :eid, :elabel"
                     ") RETURNING id"
                 ),
                 {
@@ -148,6 +155,9 @@ def record_turn(
                     "q": question, "a": answer,
                     "intent": intent, "model": model_used,
                     "tokens": tokens_used, "cost": cost_usd,
+                    "etype": primary_entity_type or None,
+                    "eid": entity_id_str,
+                    "elabel": (primary_entity_label or None),
                 },
             ).first()
             s.execute(
@@ -485,26 +495,84 @@ class FollowUpResolution:
 
 
 def resolve_follow_up(question: str, session_id: str) -> FollowUpResolution:
-    """LEGACY: yeni akışta native chat history kullanılıyor, bu no-op'a indi."""
+    """Pronoun varsa son aktif entity'yi inherited_entity_label olarak döndür."""
+    ctx = conversation_context(session_id)
+    label = ctx.get("active_entity_label")
+    has_pronoun = bool(label) and _has_product_pronoun(question or "")
     return FollowUpResolution(
-        is_followup=False,
+        is_followup=has_pronoun,
         resolved_question=question or "",
-        inherited_entity_label=None,
-        inherited_intent=None,
-        rationale="native_history",
+        inherited_entity_label=label if has_pronoun else None,
+        inherited_intent=ctx.get("active_intent") if has_pronoun else None,
+        rationale="bchat_turns.primary_entity_label" if has_pronoun else "no_pronoun_or_no_active",
     )
 
 
+def _has_product_pronoun(question: str) -> bool:
+    import re as _re
+    return bool(_re.search(r"\bbu\s+ürün\w*\b", (question or ""), flags=_re.IGNORECASE))
+
+
 def conversation_context(session_id: str, limit_turns: int = 4) -> dict:
-    """LEGACY shim — ai_synthesizer.compose_prompt eski yola düşerse kullanır."""
-    return {
-        "session_id": session_id,
-        "active_entity_label": None,
-        "active_entity_type": None,
-        "active_intent": None,
-        "history": [],
-        "anti_phrases": [],
-    }
+    """bchat_turns'tan bu session için en son non-null primary_entity'yi oku.
+
+    Pronoun çözümü için kullanılır — "bu ürün" referansları bu label'a bağlanır.
+    Boş session'lar veya hiç entity kaydı olmayan session'lar için None döner.
+    """
+    if not session_id:
+        return {
+            "session_id": session_id,
+            "active_entity_label": None,
+            "active_entity_type": None,
+            "active_entity_id": None,
+            "active_intent": None,
+            "history": [],
+            "anti_phrases": [],
+        }
+    try:
+        with _session() as s:
+            row = s.execute(
+                text(
+                    "SELECT primary_entity_type, primary_entity_id, "
+                    "       primary_entity_label, intent "
+                    "FROM bchat_turns "
+                    "WHERE session_id = :sid "
+                    "  AND primary_entity_label IS NOT NULL "
+                    "  AND TRIM(primary_entity_label) <> '' "
+                    "ORDER BY id DESC LIMIT 1"
+                ),
+                {"sid": session_id},
+            ).first()
+            if not row:
+                return {
+                    "session_id": session_id,
+                    "active_entity_label": None,
+                    "active_entity_type": None,
+                    "active_entity_id": None,
+                    "active_intent": None,
+                    "history": [],
+                    "anti_phrases": [],
+                }
+            return {
+                "session_id": session_id,
+                "active_entity_label": row.primary_entity_label,
+                "active_entity_type": row.primary_entity_type,
+                "active_entity_id": row.primary_entity_id,
+                "active_intent": row.intent,
+                "history": [],
+                "anti_phrases": [],
+            }
+    except Exception as exc:
+        print(f"[CONV_MEMORY] conversation_context failed: {exc}")
+        return {
+            "session_id": session_id,
+            "active_entity_label": None,
+            "active_entity_type": None,
+            "active_entity_id": None,
+            "active_intent": None,
+            "history": [],
+            "anti_phrases": [],
+        }
 
 
 def anti_phrase_list(session_id: str, limit_turns: int = 4) -> list[str]:
