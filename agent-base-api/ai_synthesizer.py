@@ -46,7 +46,7 @@ from typing import Any, Optional
 
 
 CHAT_USE_LLM = os.environ.get("CHAT_USE_LLM", "1") != "0"
-CHAT_LLM_MODEL = os.environ.get("CHAT_LLM_MODEL", "gpt-4o-mini")
+CHAT_LLM_MODEL = os.environ.get("CHAT_LLM_MODEL", "gpt-4o")
 CHAT_LLM_TIMEOUT = float(os.environ.get("CHAT_LLM_TIMEOUT_SEC", "20"))
 CHAT_LLM_TEMPERATURE = float(os.environ.get("CHAT_LLM_TEMPERATURE", "0.6"))
 CHAT_LLM_MAX_TOKENS = int(os.environ.get("CHAT_LLM_MAX_TOKENS", "500"))
@@ -84,7 +84,7 @@ EN ÖNEMLİ KURAL — HALÜSİNASYON YASAK:
 - VERİ bloğundaki sayıları, isimleri, rating'leri AYNEN kullan; değiştirme, yuvarlama, abartma. Blokta rating 4.10 ise sen de 4.1 de, 4.8 deme.
 
 B) VERİDE OLMAYAN METRİKLERİ UYDURMA
-- VERİ bloğunda HANGİ alanlar varsa SADECE onlardan bahset. Blokta olmayan bir metrik (satış adedi, "sahte yorum", puan dağılımı, dönüşüm oranı vb.) hakkında konuşma, sayı üretme. O metrik yoksa o konuyu hiç açma.
+- VERİ bloğunda HANGİ alanlar varsa SADECE onlardan bahset. Blokta olmayan hiçbir metrik veya iddiadan söz etme, sayı üretme — o alan yoksa o konuyu hiç açma.
 - rating_count (oy/değerlendirme sayısı) ile satış adedi TAMAMEN FARKLI şeylerdir. Oy sayısını asla satış gibi sunma. Satış verisi yoksa "satış kaydı yok" veya "0" de.
 - Yorum sorularında yorumların İÇERİĞİNİ özetle (ne beğenmişler, neden şikâyet etmişler). Elindeki yorumlar tüm yorumların küçük bir örneğidir; bunlardan "çoğu 5 yıldız", "%X olumlu" gibi DAĞILIM ÇIKARMA. Yorum sayısı gerekiyorsa yalnızca VERİ'deki rating_count değerini kullan, kendin sayma.
 - Ürün puanı sorulduğunda VERİ'deki ürün rating'ini kullan; yorumların ortalamasını alıp ayrı bir puan üretme.

@@ -179,15 +179,18 @@ def _pg_product_overview(user_id: int) -> dict:
                 ).all()
             )
             top_products = [
-                {
-                    "id": str(p.id),
-                    "name": p.name,
-                    "sales": int(p.weekly_sales) if p.weekly_sales is not None else 0,
-                    "stock": p.stock,
-                    "rating": float(p.rating) if p.rating is not None else None,
-                }
-                for p in top_rows
-            ]
+                    {
+                        "id": str(p.id),
+                        "name": p.name,
+                        "sales": int(p.weekly_sales) if p.weekly_sales is not None else 0,
+                        "stock": p.stock,
+                        "rating": float(p.rating) if p.rating is not None else None,
+                        "rating_count": int(getattr(p, "rating_count", 0) or 0),
+                        "price": float(p.price) if getattr(p, "price", None) is not None else None,
+                        "cost_price": float(p.cost_price) if getattr(p, "cost_price", None) is not None else None,
+                    }
+                    for p in top_rows
+                ]
 
             return {
                 "total_products": total_products,
@@ -306,7 +309,9 @@ def _classify_intent(question: str) -> tuple[str, list[str]]:
                     "- action: yapılması istenen komut (kampanya, story, post, banner, paylaşım, kupon).\n"
                     "- data_query: mevcut veriden somut bilgi — MAĞAZA (ad, sayı, bilgi), ÜRÜN "
                     "(fiyat, stok, satış, yorum, puan, kâr, kategori), MÜŞTERİ.\n"
-                    "- advisory: veriye dayalı yorum/öneri/strateji veya mağazanın genel durumu/özeti.\n"
+                    "- advisory: veriye dayalı yorum/öneri/strateji ya da mağazanın genel "
+                    "durumu/özeti. Örnekler: 'bugün ne yapmalıyım', 'ne yapmalıyım', 'neye "
+                    "odaklanmalıyım', 'ne önerirsin', 'fiyatlamam mantıklı mı', 'genel durum nasıl'.\n"
                     "- chat: veri gerektirmeyen sohbet/meta (selam, teşekkür, 'kimsin', "
                     "'az önce ne konuştuk', 'yalan mı söylüyorsun').\n\n"
                     "parts: SADECE intent='data_query' ise ve mesaj BİRDEN FAZLA bağımsız şey "
@@ -333,37 +338,69 @@ def _classify_intent(question: str) -> tuple[str, list[str]]:
         return fallback
 
 def _light_state_summary(user_id: int) -> str:
-    """Advisory cevaplar için hafif, PG-kaynaklı durum özeti (SQL üretmeden)."""
+    """Advisory için zengin, ETİKETLİ, PG-kaynaklı durum özeti. Her sayının ne olduğu
+    açıkça yazılır ki model yanlış okumasın (oy sayısını satış sanmasın vb.)."""
     pg = _pg_product_overview(user_id)
     if not pg:
         return ""
-    parts = [
-        f"Toplam ürün: {pg.get('total_products', 0)}",
-        f"Toplam stok: {pg.get('total_stock_units', 0)} adet",
+    lines = [
+        f"- Toplam ürün sayısı: {pg.get('total_products', 0)}",
+        f"- Toplam stok (adet): {pg.get('total_stock_units', 0)}",
+        f"- Bu haftaki toplam satış (adet): {pg.get('total_item_sales', 0)}",
     ]
-    low = pg.get("low_stock_items") or []
-    if low:
-        parts.append("Düşük stok: " + ", ".join(
-            f"{i['name']} ({i['stock']})" for i in low[:3]))
     top = pg.get("top_products") or []
     if top:
-        parts.append("Öne çıkan: " + ", ".join(t["name"] for t in top[:3]))
-    return "DURUM:\n" + "\n".join(parts)
-
+        lines.append("- Ürünler (her biri için gerçek değerler):")
+        for t in top[:5]:
+            price, cost = t.get("price"), t.get("cost_price")
+            margin = round((price - cost) / price * 100, 1) if (price and cost is not None and price > 0) else None
+            seg = [f"    • {t['name']}"]
+            if price is not None:
+                seg.append(f"fiyat: {price} TL")
+            if t.get("stock") is not None:
+                seg.append(f"stok: {t['stock']} adet")
+            seg.append(f"bu hafta satış: {t.get('sales', 0)} adet")
+            if t.get("rating") is not None:
+                seg.append(f"puan: {t['rating']} (oy/yorum sayısı: {t.get('rating_count', 0)} — bu SATIŞ DEĞİL)")
+            if margin is not None:
+                seg.append(f"kâr marjı: %{margin}")
+            lines.append(", ".join(seg))
+    low = pg.get("low_stock_items") or []
+    if low:
+        lines.append("- Düşük/biten stoklu ürünler: " + ", ".join(
+            f"{i['name']} (stok: {i['stock']})" for i in low[:5]))
+    return ("DURUM (yalnızca buradaki etiketli gerçek sayıları kullan; oy/yorum sayısını "
+            "satış sanma, eksik metriği uydurma):\n" + "\n".join(lines))
 
 def _answer_chat(question, user_id, sid, api_key, *, context_data="", advisory=False) -> dict:
     """Retrieval gerektirmeyen sohbet/meta + advisory cevap. nl_to_sql'e GİTMEZ."""
     import time as _time
     user_memories = memory.get_user_memories(user_id)
-    past_summaries = memory.get_session_summary(user_id, limit=2)
     sys = ai_synthesizer._SYSTEM_PROMPT
     if user_memories:
         sys += f"\n\nKullanıcı hakkında bilinen notlar:\n{user_memories}"
-    if past_summaries:
-        sys += f"\n\nÖnceki konuşmalardan:\n{past_summaries}"
+    # Önceki konuşma özetleri yalnızca sohbet sürekliliği için. Advisory'de faktüel kaynak
+    # sanılıp halüsinasyon besliyordu (eski cevaplardaki "sahte yorum" iddiası özete girip
+    # geri okunuyordu), o yüzden advisory'de dışarıda bırakılır.
+    if not advisory:
+        past_summaries = memory.get_session_summary(user_id, limit=2)
+        if past_summaries:
+            sys += ("\n\nÖnceki konuşmalardan (yalnızca neyi konuştuğunuzu hatırlatır, "
+                    f"mağaza gerçeği DEĞİL):\n{past_summaries}")
     if advisory:
-        sys += ("\n\nKullanıcı tavsiye/öneri istiyor. Aşağıdaki DURUM verisine dayan; "
-                "veri yoksa dürüstçe söyle, sayı UYDURMA.")
+        sys += (
+            "\n\nKullanıcı tavsiye/öneri istiyor (advisory).\n"
+            "- SOMUT ve EYLEME DÖNÜK tavsiye ver. 'Ne hakkında konuşmak istersin', 'hangi "
+            "konuda yardım istersin' gibi GERİ SORU SORMA; doğrudan öneriyle başla.\n"
+            "- Tavsiyeni yalnızca aşağıdaki DURUM bloğundaki ETİKETLİ gerçek sayılara bağla; "
+            "her öneriyi somut bir sayıyla gerekçelendir (örn. 'stok 0 olduğu için...').\n"
+            "- Hafıza ve önceki konuşma özetleri FAKTÜEL SAYI KAYNAĞI DEĞİLDİR; oradan sayı çekme.\n"
+            "- oy/yorum sayısını (rating_count) ASLA satış sanma.\n"
+            "- 'Sahte yorum', puan dağılımı, 'hedef marj' gibi DURUM'da OLMAYAN hiçbir şeyi "
+            "icat etme. Notlarda veya önceki özetlerde böyle bir ifade geçse BİLE onu bu "
+            "mağazanın gerçeği SAYMA — tek gerçek kaynak DURUM bloğudur.\n"
+            "- DURUM boşsa eldeki genel bilgiyle kısa, dürüst bir yön ver; sayı uydurma."
+        )
 
     messages = memory.build_openai_messages(
         session_id=sid, system_prompt=sys, new_question=question,
@@ -1005,7 +1042,7 @@ def answer_question(
 
     # ----- API key + model resolution -----
     api_key = _resolve_api_key(user_id)
-    model = retrieval_data.get("model_override") or ai_synthesizer.CHAT_LLM_MODEL
+    model = ai_synthesizer.CHAT_LLM_MODEL  # TEST: override'ı yoksay, hepsi 4o
 
     # ----- Long-term memory + son session özetleri system prompt'a eklenir -----
     user_memories = memory.get_user_memories(user_id)
