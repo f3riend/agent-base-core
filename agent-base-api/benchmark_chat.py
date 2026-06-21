@@ -52,6 +52,11 @@ def _fetch_ground_truth(user_id: int) -> dict:
     facts: dict = {"products": []}
     try:
         with SessionLocal() as s:
+            store_rows = list(s.scalars(
+                select(Store).where(Store.user_id == int(user_id))
+            ).all())
+            facts["store_count"] = len(store_rows)
+            facts["store_names"] = [st.name for st in store_rows]
             rows = list(s.scalars(
                 select(Product)
                 .join(Store, Product.store_id == Store.id)
@@ -115,6 +120,12 @@ SINGLE_CASES: list[dict] = [
      "expect": "Müşteri/demografi verisi yoksa uydurmadan yok demeli."},
     {"cat": "meta", "q": "Bana yalan söylüyor musun?",
      "expect": "Kısa, makul bir cevap; alakasız mağaza/ürün sayımı yapmamalı."},
+    {"cat": "magaza", "q": "Mağazamın ismi ne?",
+     "expect": "Gerçek mağaza adını (ground truth'taki store_names) vermeli, uydurmamalı."},
+    {"cat": "coklu", "q": "Kaç mağazam var ve kaç ürün var ve en çok satan 3 ürün ne?",
+     "expect": "ÜÇ parçayı da tek cevapta karşılamalı: mağaza sayısı, ürün sayısı VE en çok "
+               "satan ürünler. Satış verisi yoksa o parça için dürüstçe 'kayıt yok' demeli, "
+               "ama mağaza ve ürün sayısını yine de vermeli."},
 ]
 
 CHAIN_CASES: list[list[dict]] = [

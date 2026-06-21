@@ -286,53 +286,51 @@ def _build_open_ended_retrieval(question: str, user_id: int) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _classify_intent(question: str) -> str:
-    """LLM sınıflandırıcı → 'action' | 'data_query' | 'advisory' | 'chat'.
-
-    action     : yapılması istenen komut (kampanya/story/post/banner/paylaşım/kupon).
-    data_query : mevcut veriden somut bilgi (fiyat, stok, satış, yorum, müşteri, kâr).
-    advisory   : veriye dayalı yorum/öneri/strateji ('ne yapmalıyım', 'öne çıkarmalı mıyım').
-    chat       : veri gerektirmeyen sohbet/meta (selam, teşekkür, 'kimsin',
-                 'az önce ne konuştuk', 'bana güvenebilir miyim').
-    Fail → 'data_query' (güvenli varsayılan, mevcut davranış).
-    """
+def _classify_intent(question: str) -> tuple[str, list[str]]:
+    """LLM sınıflandırıcı → (intent, parts). Ekstra çağrı yok; bölme buraya katıldı.
+    intent ∈ {action, data_query, advisory, chat}. parts: data_query bileşikse
+    bağımsız alt-sorular; aksi halde [question]."""
+    fallback = ("data_query", [question])
     if not ai_synthesizer.CHAT_USE_LLM or not os.environ.get("OPENAI_API_KEY"):
-        return "data_query"
+        return fallback
     try:
         from openai import OpenAI
+        import json as _json
         client = OpenAI(timeout=8)
         completion = client.chat.completions.create(
             model=ai_synthesizer.CHAT_LLM_MODEL,
             messages=[
                 {"role": "system", "content": (
-                    "Bir e-ticaret operatörünün Türkçe mesajını sınıflandır. "
-                    "Tam olarak şu dört etiketten BİRİNİ döndür:\n"
-                    "- action: yapılması istenen komut (kampanya, story, post, banner, "
-                    "paylaşım, kupon oluştur/başlat).\n"
-                    "- data_query: mevcut veriden somut bilgi sorusu (fiyat, stok, satış, "
-                    "yorum, puan, müşteri, kâr, kategori).\n"
-                    "- advisory: veriye dayalı yorum/öneri/strateji VEYA mağazanın genel "
-                    "durumunu/özetini isteyen sorular ('ne yapmalıyım', 'öne çıkarmalı "
-                    "mıyım', 'hangi ürüne odaklanayım', 'genel durum nasıl', 'nasıl "
-                    "gidiyor', 'mağazam ne durumda', 'özet ver').\n"
-                    "- chat: veri gerektirmeyen sohbet veya meta (selamlama, teşekkür, "
-                    "'kimsin', 'az önce ne konuştuk', 'bana güvenebilir miyim').\n"
-                    "SADECE etiketi yaz, başka hiçbir şey yazma."
+                    "Bir e-ticaret operatörünün Türkçe mesajını sınıflandır ve gerekirse böl.\n"
+                    "intent şu dörtten biri:\n"
+                    "- action: yapılması istenen komut (kampanya, story, post, banner, paylaşım, kupon).\n"
+                    "- data_query: mevcut veriden somut bilgi — MAĞAZA (ad, sayı, bilgi), ÜRÜN "
+                    "(fiyat, stok, satış, yorum, puan, kâr, kategori), MÜŞTERİ.\n"
+                    "- advisory: veriye dayalı yorum/öneri/strateji veya mağazanın genel durumu/özeti.\n"
+                    "- chat: veri gerektirmeyen sohbet/meta (selam, teşekkür, 'kimsin', "
+                    "'az önce ne konuştuk', 'yalan mı söylüyorsun').\n\n"
+                    "parts: SADECE intent='data_query' ise ve mesaj BİRDEN FAZLA bağımsız şey "
+                    "soruyorsa, her bağımsız soruyu ayrı, kendi içinde anlamlı bir cümle olarak "
+                    "listele. Tek şey soruyorsa tüm soruyu tek eleman olarak koy. Diğer "
+                    "intent'lerde parts boş kalsın.\n"
+                    "SADECE şu JSON: {\"intent\": \"...\", \"parts\": [\"...\"]}"
                 )},
                 {"role": "user", "content": question},
             ],
-            temperature=0,
-            max_tokens=10,
+            temperature=0, max_tokens=200,
+            response_format={"type": "json_object"},
         )
-        raw = (completion.choices[0].message.content or "").strip().lower()
-        for label in ("action", "advisory", "data_query", "chat"):
-            if label in raw:
-                return label
-        return "data_query"
+        data = _json.loads((completion.choices[0].message.content or "{}").strip())
+        intent = (data.get("intent") or "").strip().lower()
+        if intent not in ("action", "data_query", "advisory", "chat"):
+            intent = "data_query"
+        parts = [str(p).strip() for p in (data.get("parts") or []) if str(p).strip()]
+        if intent != "data_query" or not parts:
+            parts = [question]
+        return intent, parts
     except Exception as exc:
         print(f"[CHAT] intent classify failed: {exc}")
-        return "data_query"
-    
+        return fallback
 
 def _light_state_summary(user_id: int) -> str:
     """Advisory cevaplar için hafif, PG-kaynaklı durum özeti (SQL üretmeden)."""
@@ -402,400 +400,6 @@ def _answer_chat(question, user_id, sid, api_key, *, context_data="", advisory=F
         "fallback": mode == "deterministic_fallback", "anti_repetition_active": False,
         "error": None,
     }
-
-_PRODUCT_SEARCH_STOPWORDS: set[str] = {
-    "için", "icin", "ile", "gibi", "ve", "veya", "ya", "da", "de", "ki",
-    "ama", "fakat", "ancak", "mi", "mı", "mu", "mü",
-    "bu", "şu", "su", "o", "bir", "birkaç", "her", "hepsi", "tüm", "tum",
-    "artık", "artik", "hemen", "sonra", "önce", "once", "şimdi", "simdi",
-    "bugün", "bugun", "yarın", "yarin", "dün", "dun",
-    "oluştur", "olustur", "yap", "hazırla", "hazirla", "yaz", "yayınla",
-    "yayinla", "paylaş", "paylas", "başlat", "baslat", "gönder", "gonder",
-    "ekle", "kaydet", "kur", "aç", "ac", "kapa", "kapat", "planla",
-    "çek", "cek", "üret", "uret", "iste", "ister", "lütfen", "lutfen",
-    "kampanya", "kampanyaya", "kampanyası", "kampanyasi",
-    "indirim", "indirimi", "indirimli", "iskonto", "kupon", "fırsat",
-    "firsat", "hediye", "promosyon", "duyuru",
-    "story", "post", "hikaye", "paylaşım", "paylasim",
-    # soru kelimeleri
-    "ne", "kim", "nerede", "neden", "niye", "niçin", "nicin", "nasıl", "nasil",
-    "hangi", "hangisi", "kaç", "kac", "kadar", "kaçtır", "kactir",
-    # ürün'den türeyen pronoun kelimeleri (rewrite öncesi search'de bağlam taşımaz)
-    "ürün", "urun", "ürünü", "urunu", "ürünün", "urunun", "ürüne", "urune",
-    "üründen", "urunden", "ürünleri", "urunleri", "ürünlerin", "urunlerin",
-    # ürün-attribute soru kelimeleri (product NAME aramada gürültü)
-    "fiyat", "fiyatı", "fiyati", "fiyata", "fiyattan", "fiyatın", "fiyatin",
-    "stok", "stoğu", "stogu", "stokta", "stoğum", "stogum", "stoğumuz", "stogumuz",
-    "yorum", "yorumu", "yorumlar", "yorumları", "yorumlari",
-    "puan", "puanı", "puani", "rating", "ortalama", "ort",
-    "marj", "marjı", "marji", "kâr", "kar", "kazanç", "kazanc",
-    "satış", "satis", "satışı", "satisi", "satılan", "satilan",
-    "adet", "adedi", "tane", "tanesi",
-    "durum", "durumu", "durumum", "değer", "deger", "değeri", "degeri",
-    "toplam", "toplamı", "toplami", "miktar", "miktarı", "miktari",
-    "ay", "hafta", "gün", "gun", "yıl", "yil",
-}
-
-_PRODUCT_SEARCH_SYNONYMS: dict[str, list[str]] = {
-    "fare":     ["mouse", "fare"],
-    "klavye":   ["keyboard", "klavye"],
-    "kulaklık": ["headset", "headphone", "kulaklık"],
-    "kulaklik": ["headset", "headphone", "kulaklik"],
-    "mouse":    ["mouse", "fare"],
-    "keyboard": ["keyboard", "klavye"],
-    "ekran":    ["monitor", "display", "ekran"],
-    "kamera":   ["camera", "webcam", "kamera"],
-    "mikrofon": ["microphone", "mikrofon"],
-}
-
-
-def _extract_product_search_terms(question: str) -> list[str]:
-    """Sorudan ürün arama terimlerini çıkar; stop-word'leri at, sinonimleri genişlet."""
-    import re as _re
-    text = (question or "").strip().lower()
-    if not text:
-        return []
-    text_norm = _re.sub(r"[^\w\s]", " ", text, flags=_re.UNICODE)
-    raw_words = [w for w in text_norm.split() if len(w) > 1]
-    filtered = [
-        w for w in raw_words
-        if w not in _PRODUCT_SEARCH_STOPWORDS and not w.isdigit()
-    ]
-    expanded: list[str] = []
-    for w in filtered:
-        expanded.extend(_PRODUCT_SEARCH_SYNONYMS.get(w, [w]))
-    return list(dict.fromkeys(expanded))
-
-
-_WORD_BOUNDARY_CACHE: dict[str, "re.Pattern"] = {}
-
-
-def _word_boundary_re(term: str) -> "re.Pattern":
-    import re as _re
-    p = _WORD_BOUNDARY_CACHE.get(term)
-    if p is None:
-        p = _re.compile(rf"\b{_re.escape(term)}\b", flags=_re.IGNORECASE | _re.UNICODE)
-        _WORD_BOUNDARY_CACHE[term] = p
-    return p
-
-
-def _name_brand_match_count(product, terms: list[str]) -> int:
-    """Word-boundary match — 'çok' substring olarak 'Çoklayıcı'da geçse de sayılmaz."""
-    name_lower = (getattr(product, "name", "") or "").lower()
-    brand_lower = (getattr(product, "brand", "") or "").lower()
-    haystack = f"{name_lower} {brand_lower}"
-    return sum(1 for t in terms if t and _word_boundary_re(t).search(haystack))
-
-
-def _is_strong_match(score: int, total_terms: int) -> bool:
-    """En az 2 farklı search-term name/brand'de word-boundary ile eşleşmeli
-    VE toplam terimlerin en az %50'sini oluşturmalı.
-
-    Bu çift kontrol, common-word leak'ini (örn. 1/8 skorla rastgele ürün
-    seçilmesi) ve düşük-bilgili kısa sorgular için yanlış pozitifi engeller.
-    """
-    if total_terms <= 0:
-        return False
-    if score < 2:
-        return False
-    if score / total_terms < 0.5:
-        return False
-    return True
-
-
-def _one_shot_find_product(user_id: int, question: str) -> dict | None:
-    """Soruda geçen ürünü PG'de güvenli şekilde ara.
-
-    Sıkı eşleşme kuralı: SADECE Product.name veya Product.brand kolonlarında
-    arar; description/category match'i tek başına yeterli sayılmaz. Stop-word
-    filtresi (Türkçe komut kalıbı kelimeleri) ve relevance skoru — en çok
-    name/brand terimi eşleşen aday seçilir. Hiçbir name/brand match'i yoksa
-    None döner; çağıran taraf "ürün bulunamadı" davranışına geçer.
-
-    Zenginleştirme:
-        - Product.images relationship → image_urls + thumb_url
-        - Bağlı Store → name + logo_url + banner_url
-    """
-    search_terms = _extract_product_search_terms(question)
-    if not search_terms:
-        print("[CHAT] product search: hiç anlamlı arama terimi yok (stop-word sonrası)")
-        return None
-
-    try:
-        from app.core.database import SessionLocal
-        from app.models.product import Product
-        from app.models.store import Store
-        from app.models.product_image import ProductImage  # noqa: F401  (mapper bootstrap)
-        from app.models.product_review import ProductReview  # noqa: F401  (mapper bootstrap)
-        from app.models.product_faq import ProductFaq  # noqa: F401  (mapper bootstrap)
-        from app.models.product_metrics_weekly import ProductMetricsWeekly  # noqa: F401  (mapper bootstrap)
-        from sqlalchemy import or_, select
-
-        with SessionLocal() as session:
-            name_brand_conds = [
-                or_(
-                    Product.name.ilike(f"%{t}%"),
-                    Product.brand.ilike(f"%{t}%"),
-                )
-                for t in search_terms
-            ]
-            candidates = list(session.scalars(
-                select(Product)
-                .join(Store, Product.store_id == Store.id)
-                .where(Store.user_id == int(user_id))
-                .where(or_(*name_brand_conds))
-            ).all())
-
-            if not candidates:
-                print(
-                    f"[CHAT] product search: name/brand için '{search_terms}' "
-                    "ile eşleşme yok — None döndürüyorum (sahte fallback yok)"
-                )
-                return None
-
-            scored = sorted(
-                candidates,
-                key=lambda p: _name_brand_match_count(p, search_terms),
-                reverse=True,
-            )
-            best = scored[0]
-            best_score = _name_brand_match_count(best, search_terms)
-            total = len(search_terms)
-            if not _is_strong_match(best_score, total):
-                print(
-                    f"[CHAT] product search: en iyi aday '{best.name}' "
-                    f"score={best_score}/{total} — strong-match eşiğini geçemedi, None"
-                )
-                return None
-
-            print(
-                f"[CHAT] product search: '{best.name}' "
-                f"(brand={best.brand!r}, score={best_score}/{total})"
-            )
-
-            first = {
-                "id":          str(best.id),
-                "name":        best.name,
-                "brand":       getattr(best, "brand", None),
-                "category":    getattr(best, "category", None),
-                "price":       float(best.price) if best.price is not None else None,
-                "description": getattr(best, "description", None),
-                "store_id":    getattr(best, "store_id", None),
-            }
-    except Exception as exc:
-        print(f"[CHAT] product search failed: {exc}")
-        return None
-
-    image_urls: list[str] = []
-    thumb_url: str | None = None
-    store_name: str | None = None
-    store_logo_url: str | None = None
-    store_banner_url: str | None = None
-    try:
-        from app.core.database import SessionLocal
-        from app.models.product import Product
-        from app.models.store import Store
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-
-        with SessionLocal() as session:
-            full = session.scalar(
-                select(Product)
-                .where(Product.id == first["id"])
-                .options(selectinload(Product.images))
-            )
-            if full is not None:
-                image_urls = [
-                    img.url for img in (full.images or [])
-                    if getattr(img, "url", None)
-                ]
-                thumb_url = image_urls[0] if image_urls else None
-
-            store_id = (
-                first.get("store_id")
-                or (getattr(full, "store_id", None) if full is not None else None)
-            )
-            if store_id is not None:
-                store = session.scalar(
-                    select(Store).where(Store.id == store_id)
-                )
-                if store is not None:
-                    store_name = getattr(store, "name", None)
-                    store_logo_url = getattr(store, "logo_url", None)
-                    store_banner_url = getattr(store, "banner_url", None)
-    except Exception as exc:
-        print(f"[CHAT] product/store enrichment failed: {exc}")
-
-    return {
-        "id":                first["id"],
-        "name":              first["name"],
-        "brand":             first.get("brand"),
-        "category":          first.get("category"),
-        "price":             first.get("price"),
-        "description":       (first.get("description") or "")[:600],
-        "image_url":         thumb_url,
-        "primary_image_url": thumb_url,
-        "image_urls":        image_urls,
-        "store_name":        store_name,
-        "store_logo_url":    store_logo_url,
-        "store_banner_url":  store_banner_url,
-    }
-
-
-def _lookup_basic_product(user_id: int, question: str) -> dict | None:
-    """Sadece id + name + brand çek — image/store enrichment yok.
-
-    answer_question'un her turunda 'soru spesifik bir ürünü adlandırıyor mu?'
-    sorusunu cevaplamak için kullanılır. _one_shot_find_product ile aynı
-    stop-word + name/brand-only mantığı; ama O(1) read, ağır enrichment yok.
-    """
-    search_terms = _extract_product_search_terms(question)
-    if not search_terms:
-        return None
-    try:
-        from app.core.database import SessionLocal
-        from app.models.product import Product
-        from app.models.store import Store
-        from app.models.product_image import ProductImage  # noqa: F401
-        from app.models.product_review import ProductReview  # noqa: F401
-        from app.models.product_faq import ProductFaq  # noqa: F401
-        from app.models.product_metrics_weekly import ProductMetricsWeekly  # noqa: F401
-        from sqlalchemy import or_, select
-
-        with SessionLocal() as session:
-            conds = [
-                or_(
-                    Product.name.ilike(f"%{t}%"),
-                    Product.brand.ilike(f"%{t}%"),
-                )
-                for t in search_terms
-            ]
-            candidates = list(session.scalars(
-                select(Product)
-                .join(Store, Product.store_id == Store.id)
-                .where(Store.user_id == int(user_id))
-                .where(or_(*conds))
-            ).all())
-            if not candidates:
-                return None
-            scored = sorted(
-                candidates,
-                key=lambda p: _name_brand_match_count(p, search_terms),
-                reverse=True,
-            )
-            best = scored[0]
-            best_score = _name_brand_match_count(best, search_terms)
-            total = len(search_terms)
-            if not _is_strong_match(best_score, total):
-                print(
-                    f"[CHAT] _lookup_basic_product: '{best.name}' "
-                    f"score={best_score}/{total} — strong-match eşiğini geçemedi, None"
-                )
-                return None
-            return {
-                "id":    str(best.id),
-                "name":  best.name,
-                "brand": getattr(best, "brand", None),
-            }
-    except Exception as exc:
-        print(f"[CHAT] _lookup_basic_product failed: {exc}")
-        return None
-
-
-def _parse_campaign_intent(question: str) -> dict:
-    """Kullanıcının doğal dil komutundan kampanya bilgilerini çıkarır.
-
-    Döner:
-        {
-            "discount_pct": 10.0,          # %10 indirim
-            "campaign_start": "2026-06-20", # kampanya başlangıç tarihi
-            "campaign_end": "2026-07-11",   # kampanya bitiş tarihi
-            "duration_days": 3,             # 3 günlük kampanya
-            "product_count": 2,             # en çok satan 2 ürün
-            "select_by": "top_sales",       # seçim kriteri
-        }
-    """
-    from datetime import datetime, timedelta
-    import re
-
-    result = {
-        "discount_pct": 0.0,
-        "campaign_start": None,
-        "campaign_end": None,
-        "duration_days": None,
-        "product_count": 1,
-        "select_by": None,
-    }
-
-    q = (question or "").lower()
-
-    # İndirim oranı — "%10", "yüzde 10", "10 indirim"
-    m = re.search(r"%\s*(\d+)|yüzde\s+(\d+)|(\d+)\s*%|(\d+)\s*(?:indirim|iskonto)", q)
-    if m:
-        val = next(v for v in m.groups() if v is not None)
-        result["discount_pct"] = float(val)
-
-    # Süre — "3 günlük", "1 haftalık"
-    m = re.search(r"(\d+)\s*günlük|(\d+)\s*gün\s*(?:süre|kampanya)", q)
-    if m:
-        val = next(v for v in m.groups() if v is not None)
-        result["duration_days"] = int(val)
-
-    m = re.search(r"(\d+)\s*haftalık|(\d+)\s*hafta", q)
-    if m:
-        val = next(v for v in m.groups() if v is not None)
-        result["duration_days"] = int(val) * 7
-
-    # Ürün sayısı — "en çok satan 2 ürün", "ilk 3 ürün"
-    m = re.search(r"en\s+(?:çok|iyi)\s+satan\s+(\d+)|ilk\s+(\d+)\s+ürün|(\d+)\s+ürün", q)
-    if m:
-        val = next(v for v in m.groups() if v is not None)
-        result["product_count"] = int(val)
-
-    if "en çok satan" in q or "çok satılan" in q:
-        result["select_by"] = "top_sales"
-    elif "en kârlı" in q or "en karlı" in q:
-        result["select_by"] = "top_margin"
-
-    # Tarih parse — "bu ayın 20'si", "gelecek ayın 11'i"
-    today = datetime.now()
-    current_month = today.replace(day=1)
-    next_month = (current_month + timedelta(days=32)).replace(day=1)
-
-    # Başlangıç tarihi
-    m_start = re.search(
-        r"bu\s+ay[ıi]n\s+(\d+)(?:'?[ıiuü]?\s*(?:ile|ile\s+başla|den\s+itibaren))?",
-        q
-    )
-    if m_start:
-        day = int(m_start.group(1))
-        try:
-            result["campaign_start"] = today.replace(day=day).strftime("%Y-%m-%d")
-        except ValueError:
-            pass
-
-    # Bitiş tarihi
-    m_end = re.search(r"gelecek\s+ay[ıi]n\s+(\d+)", q)
-    if m_end:
-        day = int(m_end.group(1))
-        try:
-            result["campaign_end"] = next_month.replace(day=day).strftime("%Y-%m-%d")
-        except ValueError:
-            pass
-
-    # Süre varsa ve başlangıç varsa bitiş hesapla
-    if result["campaign_start"] and result["duration_days"] and not result["campaign_end"]:
-        start = datetime.strptime(result["campaign_start"], "%Y-%m-%d")
-        result["campaign_end"] = (start + timedelta(days=result["duration_days"])).strftime("%Y-%m-%d")
-
-    # Başlangıç yoksa bugün
-    if not result["campaign_start"]:
-        result["campaign_start"] = today.strftime("%Y-%m-%d")
-        if result["duration_days"] and not result["campaign_end"]:
-            result["campaign_end"] = (today + timedelta(days=result["duration_days"])).strftime("%Y-%m-%d")
-
-    return result
-
 
 def _one_shot_find_top_products(user_id: int, count: int = 1, by: str = "top_sales") -> list[dict]:
     """En çok satan veya en kârlı N ürünü döner."""
@@ -1200,6 +804,35 @@ def _compose_context_text(pg_ctx: dict) -> str:
     return ""
 
 
+def _multipart_retrieval(parts, *, user_id, sid, active_label, active_id, active_type) -> dict:
+    """Her alt-soruyu ayrı route et, pg_context'leri tek VERİ bloğunda birleştir."""
+    blocks, total_rows = [], 0
+    for i, part in enumerate(parts, 1):
+        r = query_router.route(
+            part, user_id=user_id, session_id=sid,
+            active_entity_label=active_label or "",
+            active_entity_id=active_id, active_entity_type=active_type,
+        )
+        pg = ((r or {}).get("data") or {}).get("pg_context") or {}
+        txt, rc = pg.get("text") or "", pg.get("row_count", 0)
+        if txt and rc:
+            blocks.append(f"[Bölüm {i} — {part}]\n{txt}")
+            total_rows += rc
+        else:
+            blocks.append(f"[Bölüm {i} — {part}]\n(kayıt yok)")
+    return {
+        "intent": "multi_query", "routed_intent": "smart_query", "answer": "",
+        "data": {
+            "pg_context": {
+                "type": "smart_context", "text": "\n\n".join(blocks),
+                "description": "çok parçalı sorgu", "row_count": total_rows,
+                "is_error": False, "error": None,
+            },
+            "op_context": {}, "model_override": "gpt-4o-mini",
+        },
+        "recommendations": [], "confidence": 0.85,
+    }
+
 def answer_question(
     question: str,
     user_id: int = 1,
@@ -1243,7 +876,7 @@ def answer_question(
     # normal soruları yanlışlıkla kural mutasyonuna dönüştürüyordu. Onun
     # yerine ucuz bir LLM sınıflandırıcı: "action" ise nl_rule_parser +
     # LangGraph one-shot akışı; "query" ise mevcut retrieval+synthesizer.
-    intent_class = _classify_intent(question)
+    intent_class, parts = _classify_intent(question)
     if intent_class == "action":
         one_shot = _one_shot_run(question, user_id)
         if one_shot:
@@ -1320,14 +953,20 @@ def answer_question(
     # ----- Smart retrieval (yeni akış) -----
     # business_query_router → mention parser → access → cache → intent →
     # smart_query → format. Asla _pg_full_snapshot çekmez.
-    retrieval = query_router.route(
-        question,
-        user_id=user_id,
-        session_id=sid,
-        active_entity_label=prev_active_label or "",
-        active_entity_id=prev_active_id,
-        active_entity_type=prev_active_type,
-    )
+    
+    if len(parts) > 1:
+        retrieval = _multipart_retrieval(
+            parts, user_id=user_id, sid=sid,
+            active_label=prev_active_label, active_id=prev_active_id,
+            active_type=prev_active_type,
+        )
+    else:
+        retrieval = query_router.route(
+            question, user_id=user_id, session_id=sid,
+            active_entity_label=prev_active_label or "",
+            active_entity_id=prev_active_id, active_entity_type=prev_active_type,
+        )
+
     if retrieval is None:
         retrieval = {
             "intent": "general_overview",

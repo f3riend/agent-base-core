@@ -535,48 +535,6 @@ def _route_and_generate(question: str, key: str) -> tuple[str, str, str, str | N
         return "", f"LLM hatası: {exc}", "mini", None
 
 
-def _match_template(question: str) -> dict | None:
-    """Şablon eşleştir. Öncelik sırası önemli — spesifik şablonlar önce kontrol edilir."""
-    q = question.lower()
-
-    # Bilinen marka/ürün isimleri varsa LLM'e bırak — şablon çok genel kalır
-    specific_brands = [
-        "razer", "aula", "jbl", "logitech", "steelseries", "baseus",
-        "xiaomi", "anker", "samsung", "brateck", "joby", "sony", "apple",
-        "spigen", "belkin", "ugreen", "corsair", "hyperx", "hyper x",
-        "kingston", "crucial", "western digital", "wd", "dji", "neewer",
-        "elgato", "edifier", "tp-link", "philips", "kensington", "targus",
-    ]
-    has_specific = any(brand in q for brand in specific_brands)
-
-    # Öncelik sırası: spesifik şablonlar önce
-    priority_order = [
-        "kategori_analiz", "birlikte_alinan", "haftalik_satis", "aylik_ciro",
-        "dusuk_stok", "musteri_analiz", "fiyat_gecmisi", "fiyat_sirala",
-        "kampanya_onerisi", "en_cok_satan", "stok_durumu", "kar_marji",
-        "bu_ay_ciro", "genel_ozet", "yorumlar",
-    ]
-
-    for key in priority_order:
-        tpl = _TEMPLATES.get(key)
-        if not tpl:
-            continue
-        if any(kw in q for kw in tpl["keywords"]):
-            # Spesifik ürün/marka varsa yorum şablonunu atla
-            if has_specific and key == "yorumlar":
-                return None
-            return tpl
-
-    # Öncelik listesinde olmayan şablonları da kontrol et
-    for key, tpl in _TEMPLATES.items():
-        if key in priority_order:
-            continue
-        if any(kw in q for kw in tpl["keywords"]):
-            return tpl
-
-    return None
-
-
 # ---------------------------------------------------------------------------
 # SQL doğrulayıcı — information_schema ile gerçek kolon kontrolü
 # ---------------------------------------------------------------------------
