@@ -46,7 +46,7 @@ from typing import Any, Optional
 
 
 CHAT_USE_LLM = os.environ.get("CHAT_USE_LLM", "1") != "0"
-CHAT_LLM_MODEL = os.environ.get("CHAT_LLM_MODEL", "gpt-4o")
+CHAT_LLM_MODEL = os.environ.get("CHAT_LLM_MODEL", "gpt-4o-mini")
 CHAT_LLM_TIMEOUT = float(os.environ.get("CHAT_LLM_TIMEOUT_SEC", "20"))
 CHAT_LLM_TEMPERATURE = float(os.environ.get("CHAT_LLM_TEMPERATURE", "0.6"))
 CHAT_LLM_MAX_TOKENS = int(os.environ.get("CHAT_LLM_MAX_TOKENS", "500"))

@@ -137,6 +137,60 @@ _TEMPLATES = {
         """,
         "description": "En çok satılan ürünler",
     },
+    "yorum_istatistik": {
+        "keywords": ["yüzde kaç", "olumlu olumsuz", "kaçı olumlu", "kaçı olumsuz",
+                     "yorum istatistik", "yorum dağılım", "memnuniyet oranı",
+                     "kaç yıldız", "puan dağılımı", "rapor", "istatistik"],
+        "sql": """
+            SELECT p.name AS urun,
+                   COUNT(*) AS toplam_yorum,
+                   COUNT(*) FILTER (WHERE pr.rating >= 4) AS olumlu,
+                   COUNT(*) FILTER (WHERE pr.rating = 3) AS notr,
+                   COUNT(*) FILTER (WHERE pr.rating <= 2) AS olumsuz,
+                   ROUND(100.0 * COUNT(*) FILTER (WHERE pr.rating >= 4) / NULLIF(COUNT(*), 0), 1) AS olumlu_yuzde,
+                   ROUND(100.0 * COUNT(*) FILTER (WHERE pr.rating <= 2) / NULLIF(COUNT(*), 0), 1) AS olumsuz_yuzde,
+                   ROUND(AVG(pr.rating)::numeric, 2) AS ornek_ortalama
+            FROM product_reviews pr
+            JOIN products p ON p.id = pr.product_id
+            JOIN stores s ON p.store_id = s.id
+            WHERE s.user_id = :user_id
+              AND p.store_id = ANY(CAST(:store_ids AS uuid[]))
+            GROUP BY p.id, p.name
+            ORDER BY toplam_yorum DESC
+            LIMIT 20
+        """,
+        "description": "Yorum dağılım istatistiği (olumlu/olumsuz yüzde)",
+    },
+    "en_iyi_puanli": {
+        "keywords": ["en iyi ürün", "en iyi 3 ürün", "en iyi ürünlerim", "en yüksek puan",
+                     "en iyi puanlı", "en beğenilen", "en iyi yorumu alan", "puanı en yüksek"],
+        "sql": """
+            SELECT p.name, p.rating AS puan, p.rating_count AS degerlendirme_sayisi
+            FROM products p
+            JOIN stores s ON p.store_id = s.id
+            WHERE s.user_id = :user_id
+              AND p.store_id = ANY(CAST(:store_ids AS uuid[]))
+              AND p.is_active = true
+            ORDER BY p.rating DESC NULLS LAST, p.rating_count DESC NULLS LAST
+            LIMIT 5
+        """,
+        "description": "En iyi puanlı ürünler",
+    },
+    "en_cok_degerlendirilen": {
+        "keywords": ["en çok değerlendirilen", "en çok yorum alan", "en çok oy",
+                     "en popüler", "en çok yorumlanan"],
+        "sql": """
+            SELECT p.name, p.rating AS puan, p.rating_count AS degerlendirme_sayisi
+            FROM products p
+            JOIN stores s ON p.store_id = s.id
+            WHERE s.user_id = :user_id
+              AND p.store_id = ANY(CAST(:store_ids AS uuid[]))
+              AND p.is_active = true
+            ORDER BY p.rating_count DESC NULLS LAST
+            LIMIT 5
+        """,
+        "description": "En çok değerlendirilen ürünler",
+    },
     "stok_durumu": {
         "keywords": ["stok", "elimde mal", "malım var mı", "ürün kaldı mı", "stokta"],
         "sql": """
@@ -426,6 +480,14 @@ ZORUNLU KURALLAR:
     WHERE <ürün adı/marka filtresi> AND store_id = ANY(CAST(:store_ids AS uuid[]))
     products.rating kanonik puandır. rating'i başka bir sayıyla ÇARPMA/BÖLME,
     AVG/SUM/GROUP BY KULLANMA. product_reviews.rating'in ortalamasını da ALMA.
+13. Ürün kârı/marjı sorulduğunda SADECE şu kalıbı kullan (satış adedi AYRICA
+    sorulmadıkça order_items/orders tablolarına DOKUNMA):
+    SELECT name, price, cost_price,
+           ROUND(((price - cost_price) / price * 100)::numeric, 2) AS marj_yuzde
+    FROM products
+    WHERE <ürün adı/marka filtresi> AND store_id = ANY(CAST(:store_ids AS uuid[]))
+    order_items/orders'a JOIN YAPMA, SUM/GROUP BY KULLANMA. cost_price NULL ise
+    marj NULL döner; bu durumda "maliyet verisi yok" demek DOĞRUdur, sayı UYDURMA.    
 
 SADECE JSON döndür:
 {{
@@ -452,6 +514,14 @@ def _is_safe(sql: str) -> bool:
     if _FORBIDDEN.search(sql):
         return False
     return True
+
+def _enforce_scope(sql: str) -> bool:
+    """Custom SQL tenant sınırında mı? store_ids referansı YOKSA güvenli değil —
+    tüm tabloyu tarar ve tenant izolasyonunu kırar. Template'ler bu kontrolden
+    muaftır (hepsinde store_ids zaten var). Yalnızca LLM'in ürettiği custom SQL'e uygulanır.
+    Kral/sadrazam modeli: store_ids dışarıda doldurulur (sadrazam=kendi mağazaları,
+    kral=tüm mağazalar); ama filtrenin SQL'de BULUNMASI her custom sorgu için zorunludur."""
+    return ":store_ids" in sql
 
 
 def _ensure_uuid_cast(sql: str) -> str:
@@ -619,8 +689,13 @@ def nl_to_sql(
 
     # 4) Güvenlik
     if not _is_safe(sql):
-        print(f"[NL_TO_SQL] GÜVENSİZ SQL reddedildi: {sql[:120]}")
         return _empty("Güvenlik: sadece SELECT sorgularına izin verilir.")
+
+    # Tenant scope zorlaması: SADECE custom SQL'e uygulanır (template'ler zaten güvenli).
+    # store_ids filtresi yoksa sorgu tüm tabloyu tarar = tenant sızıntısı → reddet.
+    if not used_template and not _enforce_scope(sql):
+        print(f"[NL_TO_SQL] GÜVENLİK: custom SQL'de :store_ids scope yok, reddedildi.\nSQL: {sql}")
+        return _empty("Güvenlik: kapsam (store_ids) filtresi eksik, sorgu reddedildi.")
 
     # 5) UUID cast + LIMIT garantisi
     sql = _ensure_uuid_cast(sql)
@@ -652,7 +727,7 @@ def nl_to_sql(
                     f"aggregate olmayan TÜM kolonları GROUP BY'a ekle; tek kayıt için "
                     f"GROUP BY'a gerek yoksa hiç kullanma.", key
                 )
-                if fix_sql and _is_safe(fix_sql):
+                if fix_sql and _is_safe(fix_sql) and _enforce_scope(fix_sql):
                     sql = _ensure_limit(_ensure_uuid_cast(fix_sql))
                     description = fix_desc or description
                     model_tier = fix_tier or model_tier

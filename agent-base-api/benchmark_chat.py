@@ -73,7 +73,7 @@ def _fetch_ground_truth(user_id: int) -> dict:
                         select(ProductReview.content)
                         .where(ProductReview.product_id == p.id)
                         .where(ProductReview.content.isnot(None))
-                        .limit(4)
+                        .limit(8)
                     ).all()
                 ]
                 facts["products"].append({
@@ -81,6 +81,7 @@ def _fetch_ground_truth(user_id: int) -> dict:
                     "price": float(p.price) if p.price is not None else None,
                     "cost_price": float(p.cost_price) if getattr(p, "cost_price", None) is not None else None,
                     "stock": getattr(p, "stock_quantity", None) if getattr(p, "stock_quantity", None) is not None else getattr(p, "stock", None),
+                    "weekly_sales": int(getattr(p, "weekly_sales", 0) or 0),
                     "rating": float(p.rating) if p.rating is not None else None,
                     "rating_count": p.rating_count,
                     "review_rows": int(rc),
@@ -109,9 +110,11 @@ SINGLE_CASES: list[dict] = [
     {"cat": "kar", "q": "Pantene'den ne kadar kâr ediyorum?",
      "expect": "cost_price varsa marj hesaplamalı; yoksa 'maliyet verisi yok' demeli, UYDURMAMALI."},
     {"cat": "belirsiz", "q": "Genel durum nasıl?",
-     "expect": "Eldeki veriyle kısa özet; jargon ve boş tavsiye olmamalı."},
+     "expect": "Eldeki GERÇEK veriyle (ürün sayısı, stok, fiyat, puan) somut özet ver. "
+               "'Kayıt yok' DEME (veri var), jargon/boş tavsiye/uydurma YOK."},
     {"cat": "belirsiz", "q": "Bugün ne yapmalıyım?",
-     "expect": "Veriye dayalı somut öneri ya da veri yoksa dürüstçe sınırını söylemeli."},
+     "expect": "Gerçek duruma dayalı SOMUT öneri ver (örn. stok 0 -> yenile). 'Ne konuşmak "
+               "istersin / hangi konuda yardım' gibi GERİ SORU sorma. Uydurma metrik YOK."},
     {"cat": "nodata", "q": "Geçen ay kaç satış yaptım?",
      "expect": "Sipariş verisi yoksa 'satış kaydı yok / 0' demeli, sayı UYDURMAMALI."},
     {"cat": "nodata", "q": "Rakiplerim ne kadar satıyor?",
@@ -126,6 +129,16 @@ SINGLE_CASES: list[dict] = [
      "expect": "ÜÇ parçayı da tek cevapta karşılamalı: mağaza sayısı, ürün sayısı VE en çok "
                "satan ürünler. Satış verisi yoksa o parça için dürüstçe 'kayıt yok' demeli, "
                "ama mağaza ve ürün sayısını yine de vermeli."},
+    {"cat": "tavsiye", "q": "Stoğu biten ürünlerim için ne yapmalıyım, fiyatlamam mantıklı mı?",
+     "expect": "Gerçek sayılara dayalı SOMUT tavsiye (stok 0, fiyat). GERİ SORU sormamalı. "
+               "'Sahte yorum', 'hedef marj 100' gibi DURUM'da olmayan uydurma ibareler YASAK."},
+    {"cat": "yorum_eval", "q": "Pantene hakkında müşteriler ne diyor, genel bir değerlendirme yap?",
+     "expect": "Gerçek yorum temalarına dayanmalı (olumlu: yumuşaklık/koku/parlaklık; olumsuz "
+               "veya orijinallik/yanlış ürün şikâyetleri de gerçek olabilir). 'Tam X sahte "
+               "yorum' gibi SPESİFİK uydurma sayı vermemeli; rating_count'u satış SANMAMALI."},
+    {"cat": "coklu", "q": "Pantene'nin fiyatı, stoğu ve puanı ne, bir de müşteriler genel ne demiş?",
+     "expect": "Dört parçayı da karşılamalı: fiyat, stok, puan VE yorum özeti — hepsi gerçek "
+               "veriden, hiçbir parçada uydurma olmadan."},
 ]
 
 CHAIN_CASES: list[list[dict]] = [
@@ -164,8 +177,18 @@ _JUDGE_PROMPT = (
     "örnektir, eksik olabilir. Asistanın verdiği toplam product_count ile uyumluysa "
     "DOĞRUdur.\n"
     "- 'rating' kanonik ürün puanıdır (yorum ortalaması DEĞİL).\n"
+    "- 'stock' ve 'weekly_sales' alanları gerçektir; asistan 'stok tükenmiş/0' veya "
+    "'bu hafta satış yok/0' der ve ground truth'ta bu değer 0 ise DOĞRUdur, halüsinasyon "
+    "DEĞİLdir.\n"
     "- 'sample_reviews' gerçek yorum örnekleridir; asistanın yorum özeti bunlarla "
     "uyumluysa halüsinasyon değildir.\n"
+    "- 'sample_reviews' KÜÇÜK bir örnektir (toplamda yüzlerce yorum var). Asistanın "
+    "özetindeki olumsuz/orijinallik şikâyetlerini (sahte, yanlış ürün, paketleme, eksik) "
+    "yalnızca bu küçük örnekte yok diye HALÜSİNASYON SAYMA; sadece açıkça imkânsız ya da "
+    "SPESİFİK uydurma sayıları ('tam 7 sahte yorum' gibi) cezalandır.\n"
+    "- ADVISORY/tavsiye sorularında: asistan somut öneri vermeyip GERİ SORU soruyorsa "
+    "('ne konuşmak istersin', 'hangi konuda yardım istersin' gibi) DÜŞÜK puan ver. "
+    "Gerçek sayıya dayalı, doğrudan, somut öneri -> yüksek puan.\n"
     "SADECE şu JSON'u döndür:\n"
     '{"dogruluk": <0-5>, "alaka": <0-5>, "ton": <0-5>, '
     '"halusinasyon": <true|false>, "puan": <0-100>, "gerekce": "<tek cümle>"}'

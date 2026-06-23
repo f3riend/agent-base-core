@@ -287,7 +287,16 @@ def _build_open_ended_retrieval(question: str, user_id: int) -> dict:
 # ---------------------------------------------------------------------------
 # One-shot action dispatch — LLM classifier + direct LangGraph kickoff
 # ---------------------------------------------------------------------------
+_SMART_MODEL = "gpt-4o"
+_FAST_MODEL = "gpt-4o-mini"
 
+def _pick_model(intent_class: str, parts: list[str]) -> str:
+    """advisory + çok-parçalı data_query → 4o; basit tekil data_query ve chat → mini."""
+    if intent_class == "advisory":
+        return _SMART_MODEL
+    if intent_class == "data_query" and len(parts) > 1:
+        return _SMART_MODEL
+    return _FAST_MODEL
 
 def _classify_intent(question: str) -> tuple[str, list[str]]:
     """LLM sınıflandırıcı → (intent, parts). Ekstra çağrı yok; bölme buraya katıldı.
@@ -372,7 +381,7 @@ def _light_state_summary(user_id: int) -> str:
     return ("DURUM (yalnızca buradaki etiketli gerçek sayıları kullan; oy/yorum sayısını "
             "satış sanma, eksik metriği uydurma):\n" + "\n".join(lines))
 
-def _answer_chat(question, user_id, sid, api_key, *, context_data="", advisory=False) -> dict:
+def _answer_chat(question, user_id, sid, api_key, *, context_data="", advisory=False, model=None) -> dict:
     """Retrieval gerektirmeyen sohbet/meta + advisory cevap. nl_to_sql'e GİTMEZ."""
     import time as _time
     user_memories = memory.get_user_memories(user_id)
@@ -409,7 +418,7 @@ def _answer_chat(question, user_id, sid, api_key, *, context_data="", advisory=F
     t0 = _time.monotonic()
     try:
         answer_text, model_id, tokens = ai_synthesizer.synthesize_with_openai(
-            messages=messages, model=ai_synthesizer.CHAT_LLM_MODEL, api_key=api_key,
+            messages=messages, model=model or ai_synthesizer.CHAT_LLM_MODEL, api_key=api_key,
         )
         if not answer_text:
             raise RuntimeError("empty completion")
@@ -972,11 +981,13 @@ def answer_question(
         print("[CHAT] one_shot returned None, falling back to query path")
         # ----- Veri gerektirmeyen sorular: retrieval'sız sohbet/advisory -----
         # ----- Veri gerektirmeyen sorular: retrieval'sız sohbet/advisory -----
+    api_key = _resolve_api_key(user_id)
     if intent_class in ("chat", "advisory"):
         ctx = _light_state_summary(user_id) if intent_class == "advisory" else ""
         return _answer_chat(
-            question, user_id, sid, _resolve_api_key(user_id),
+            question, user_id, sid, api_key,
             context_data=ctx, advisory=(intent_class == "advisory"),
+            model=_pick_model(intent_class, parts),
         )
 
     # ----- Coreference: önceki turdan aktif entity'yi al -----
@@ -1042,7 +1053,7 @@ def answer_question(
 
     # ----- API key + model resolution -----
     api_key = _resolve_api_key(user_id)
-    model = ai_synthesizer.CHAT_LLM_MODEL  # TEST: override'ı yoksay, hepsi 4o
+    model = _pick_model(intent_class, parts)  # hibrit: basit→mini, çok-parçalı→4o
 
     # ----- Long-term memory + son session özetleri system prompt'a eklenir -----
     user_memories = memory.get_user_memories(user_id)
@@ -1050,9 +1061,15 @@ def answer_question(
 
     full_system_prompt = ai_synthesizer._SYSTEM_PROMPT
     if user_memories:
-        full_system_prompt += f"\n\nKullanıcı hakkında bilinen notlar:\n{user_memories}"
-    if past_summaries:
-        full_system_prompt += f"\n\nÖnceki konuşmalardan:\n{past_summaries}"
+        full_system_prompt += (
+            "\n\nKullanıcı hakkında notlar (yalnızca tercih/bağlam; buradaki hiçbir sayı "
+            "veya iddiayı mağaza gerçeği SAYMA — tek gerçek kaynak VERİ bloğudur):\n"
+            f"{user_memories}"
+        )
+    # NOT: past_summaries DATA_QUERY sentezine bilerek EKLENMEZ — eski cevaplardaki
+    # halüsinasyonlu iddialar (ör. "sahte yorum", "hedef marj") özete girip geri
+    # okunuyordu. Süreklilik zaten build_openai_messages'taki son-tur geçmişiyle sağlanıyor.
+    # (hafıza/"az önce ne konuştuk" sorusu chat yolundan geçer, özetini orada alır.)
 
     pg_ctx = retrieval_data.get("pg_context") or {}
     context_text = _compose_context_text(pg_ctx)
