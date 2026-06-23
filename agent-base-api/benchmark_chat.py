@@ -31,8 +31,8 @@ load_app_env()
 
 from business_chat import answer_question  # noqa: E402
 
-PANTENE_USER = 2          # tek ürün (Pantene) — coreference + doğruluk için
-MULTI_USER = 1            # 45 ürün — scope sızıntısı testi için
+PANTENE_USER = 2          # gerçek mağaza (6 ürün, Pantene dahil) — doğruluk + coreference
+MULTI_USER = 1            # 45 mock ürün — scope sızıntısı testi için
 SCORE_GATE = 75           # genel skor bunun altındaysa exit 1
 
 
@@ -147,7 +147,11 @@ CHAIN_CASES: list[list[dict]] = [
         {"cat": "coref", "q": "Peki bu ürünün stok durumu ne?", "entity": "Pantene"},
         {"cat": "coref", "q": "Yorumları nasıl peki?", "entity": "Pantene"},
         {"cat": "hafiza", "q": "Az önce ne konuşuyorduk?",
-         "expect": "Önceki turlarda konuşulan ürünü/konuyu (Pantene) doğru hatırlamalı; uydurmamalı."},
+         "expect": "Bu chain'de (Pantene fiyat→stok→yorum) konuşulanı hatırlamalı. NOT: "
+                   "benchmark tek koşuda aynı user'da birçok senaryo çalıştırdığından, "
+                   "session özeti önceki SINGLE turlarını da içerebilir — chain'in kendi "
+                   "Pantene konusunu doğru hatırlıyorsa DOĞRU say, koşu-içi diğer ürün "
+                   "değinmelerini halüsinasyon sayma."},
     ],
 ]
 
@@ -176,6 +180,13 @@ _JUDGE_PROMPT = (
     "- 'product_count' gerçek TOPLAM ürün sayısıdır; 'products' listesi yalnızca "
     "örnektir, eksik olabilir. Asistanın verdiği toplam product_count ile uyumluysa "
     "DOĞRUdur.\n"
+    "- 'products' listesinde BİRDEN ÇOK ürün olabilir (mağazada birden fazla ürün var). "
+    "Soru BELİRLİ bir üründen bahsediyorsa (örn. 'Pantene'), o ürünü 'products' içinde "
+    "ADINDAN bul ve cevabı YALNIZCA o ürünün verisiyle kıyasla; listedeki DİĞER ürünlerin "
+    "sayıları farklı diye asistanı halüsinasyonla SUÇLAMA. Cevap, bahsedilen ürünün "
+    "gerçek verisiyle uyumluysa DOĞRUdur.\n"
+    "- Asistan 'toplam X ürün' der ve X == product_count ise bu KESİNLİKLE DOĞRUdur, "
+    "halüsinasyon DEĞİLdir (örnek listenin uzunluğuna bakma, product_count'a bak).\n"
     "- 'rating' kanonik ürün puanıdır (yorum ortalaması DEĞİL).\n"
     "- 'stock' ve 'weekly_sales' alanları gerçektir; asistan 'stok tükenmiş/0' veya "
     "'bu hafta satış yok/0' der ve ground truth'ta bu değer 0 ise DOĞRUdur, halüsinasyon "

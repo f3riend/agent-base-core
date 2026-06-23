@@ -151,6 +151,32 @@ def get_product(
     )
 
 
+def _sync_product_to_index(product, store_id, user_id: int) -> None:
+    """Ürünü ChromaDB index'ine ekle/güncelle. Best-effort: index hatası ürün
+    işlemini ASLA çökertmez (ürün zaten PostgreSQL'de; index reindex ile düzelir)."""
+    try:
+        from app.services import product_index
+        product_index.upsert_products([{
+            "id": str(product.id),
+            "name": product.name or "",
+            "brand": getattr(product, "brand", None),
+            "category": getattr(product, "category", None),
+            "store_id": str(store_id),
+            "user_id": int(user_id),
+        }])
+    except Exception as exc:
+        print(f"[COMMERCE] product index upsert atlandı (best-effort): {exc}")
+
+
+def _remove_product_from_index(product_id) -> None:
+    """Ürünü ChromaDB index'inden sil. Best-effort."""
+    try:
+        from app.services import product_index
+        product_index.delete_product(str(product_id))
+    except Exception as exc:
+        print(f"[COMMERCE] product index delete atlandı (best-effort): {exc}")
+
+
 def create_product(
     db: Session, user_id: int, data: ProductCreate
 ) -> Product:
@@ -211,6 +237,7 @@ def create_product(
 
     db.commit()
     db.refresh(product)
+    _sync_product_to_index(product, data.store_id, user_id)
     # Detay yanıtı için eager-load
     return get_product(db, user_id, product.id) or product
 
@@ -226,6 +253,7 @@ def update_product(
         setattr(product, field, value)
     db.commit()
     db.refresh(product)
+    _sync_product_to_index(product, product.store_id, user_id)
     return product
 
 
@@ -237,6 +265,7 @@ def delete_product(
         return False
     db.delete(product)
     db.commit()
+    _remove_product_from_index(product_id)
     return True
 
 
