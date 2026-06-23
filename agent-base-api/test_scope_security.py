@@ -46,10 +46,9 @@ CASES = [
     ("Filtresiz tüm tablo",
      "SELECT name, price FROM products WHERE price > 1000",
      False, True),
-    ("Sadece user_id (store_ids yok)",
-     "SELECT name FROM products p JOIN stores s ON p.store_id = s.id "
-     "WHERE s.user_id = :user_id",
-     False, True),
+    ("Sadece user_id meşru (stores izolasyonu)",
+     "SELECT name FROM stores WHERE user_id = :user_id",
+     True, True),
     ("Hiç WHERE yok",
      "SELECT MAX(price) - MIN(price) FROM products",
      False, True),

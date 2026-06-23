@@ -49,14 +49,31 @@ _RESOLVE_PROMPT = (
 )
 
 
-def _fetch_catalog(user_id: int, limit: int) -> list[dict]:
-    """Kullanıcının aktif ürünlerini hafifçe çek (id, name, brand)."""
+def _fetch_catalog(user_id: int, limit: int, query: str | None = None) -> list[dict]:
+    """Aday ürünleri çek (id, name, brand).
+
+    query verilirse: ÖNCE ChromaDB'den soruya en yakın `limit` ürünü al — token
+    katalog büyüklüğünden bağımsız sabit kalır, 300+ ürünlü mağazada da çalışır.
+    ChromaDB boş/erişilemez ya da query yoksa: SQL ile tüm katalog (fallback,
+    bugünkü davranış — küçük mağaza veya index henüz kurulmamışsa)."""
+    # 1) Vektör arama (ölçeklenen yol)
+    if query:
+        try:
+            from app.services import product_index
+            hits = product_index.search(query, user_id=int(user_id), n=limit)
+            if hits:
+                # brand metadata'da yok; isim eşleştirme için name yeterli, brand boş geçilir
+                return [
+                    {"id": str(h["product_id"]), "name": h.get("name") or "", "brand": ""}
+                    for h in hits if h.get("product_id")
+                ]
+        except Exception as exc:
+            print(f"[PRODUCT_RESOLVER] chroma search fallback: {exc}")
+
+    # 2) Fallback: SQL ile tüm katalog (küçük mağaza / index yok)
     from app.core.database import SessionLocal
     from app.models.product import Product
     from app.models.store import Store
-    # Mapper bootstrap — Product.images vb. relationship'lerin string-based
-    # referansları (örn. order_by="ProductImage.sort_order") configure
-    # edilebilsin diye ilişkili sınıflar registry'ye yüklenmeli.
     from app.models.product_image import ProductImage  # noqa: F401
     from app.models.product_review import ProductReview  # noqa: F401
     from app.models.product_faq import ProductFaq  # noqa: F401
@@ -76,7 +93,6 @@ def _fetch_catalog(user_id: int, limit: int) -> list[dict]:
         for r in rows
     ]
 
-
 def resolve_products(
     question: str,
     user_id: int,
@@ -95,7 +111,7 @@ def resolve_products(
     if not q or not key:
         return []
 
-    catalog = _fetch_catalog(user_id, max_catalog)
+    catalog = _fetch_catalog(user_id, max_catalog, query=q)
     if not catalog:
         return []
 

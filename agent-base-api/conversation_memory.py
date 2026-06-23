@@ -339,14 +339,28 @@ def get_session_summary(user_id: int, limit: int = 3) -> str:
 # ---------------------------------------------------------------------------
 
 
-_EXTRACT_PROMPT = (
-    "Aşağıda bir e-ticaret asistanı ile satıcı arasındaki bir konuşma turu var. "
-    "Satıcı hakkında uzun vadede hatırlanacak NET bir bilgi varsa JSON döndür: "
-    '{"key": "kısa_snake_case", "value": "kısa açıklama"}. '
-    "Hatırlanacak bir şey yoksa SADECE 'null' yaz, başka hiçbir şey yazma. "
-    "Örnek key'ler: razer_strategy, indirim_tercihi, oncelikli_urun, hedef_marj, "
-    "raporlama_tercihi. Geçici / tek seferlik bilgileri kaydetme."
-)
+_EXTRACT_PROMPT = """Aşağıda bir e-ticaret asistanı ile satıcı arasındaki bir konuşma turu var.
+
+GÖREV: Yalnızca satıcının KALICI KİŞİSEL TERCİHİ veya ÇALIŞMA TARZI varsa kaydet.
+Bunlar zaman içinde değişmeyen, satıcının kim olduğu/nasıl çalışmak istediğiyle ilgili
+bilgilerdir. Örnek kaydedilecekler:
+  - iletisim_tercihi: "kısa ve net cevap ister"
+  - rapor_tercihi: "tabloları sever"
+  - ilgi_alani: "kozmetik kategorisine odaklanmak istiyor"
+  - dil: "samimi/sen dili tercih ediyor"
+
+ASLA KAYDETME (bunlar mağaza VERİSİDİR, PostgreSQL'de canlı tutulur — memory'e YAZMA):
+  - Sayısal mağaza metrikleri: fiyat, stok, satış adedi, marj, hedef marj, kâr, ciro
+  - Ürün/yorum/puan bilgileri: "X ürünü", rating, yorum sayısı, "sahte yorum var" gibi
+  - Tek seferlik/geçici durumlar veya asistanın o turdaki cevabından çıkan iddialar
+  - DB'den gelen herhangi bir olgu — bunlar zaten her soruda canlı çekilir
+
+ÖNEMLİ: Asistanın cevabındaki bir sayıyı/iddiayı ASLA "satıcı hakkında bilgi" diye
+kaydetme. Sadece satıcının KENDİ ifade ettiği kalıcı tercih sayılır.
+
+Kaydedilecek net bir KİŞİSEL TERCİH varsa JSON döndür:
+{"key": "kisa_snake_case", "value": "kısa açıklama"}
+Yoksa SADECE 'null' yaz, başka hiçbir şey yazma."""
 
 
 def extract_and_save_memories(

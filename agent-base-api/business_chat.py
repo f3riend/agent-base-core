@@ -1136,6 +1136,13 @@ def answer_question(
             current_entity_label = found_in_this_turn.get("name")
             current_entity_id = found_in_this_turn.get("id")
             current_entity_type = "product"
+        else:
+            # (3) Yeni ürün adlandırılmadı VE zamir rewrite yok → örtük takip
+            # ("yorumları nasıl", "peki ya stoğu"). Önceki aktif entity'yi KORU,
+            # zinciri kırma. (Eski davranış zinciri burada düşürüyordu → coref bug.)
+            current_entity_label = prev_active_label
+            current_entity_id = prev_active_id
+            current_entity_type = prev_active_type
 
     # ----- Tur kaydı -----
     memory.record_turn(

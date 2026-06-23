@@ -516,12 +516,12 @@ def _is_safe(sql: str) -> bool:
     return True
 
 def _enforce_scope(sql: str) -> bool:
-    """Custom SQL tenant sınırında mı? store_ids referansı YOKSA güvenli değil —
-    tüm tabloyu tarar ve tenant izolasyonunu kırar. Template'ler bu kontrolden
-    muaftır (hepsinde store_ids zaten var). Yalnızca LLM'in ürettiği custom SQL'e uygulanır.
-    Kral/sadrazam modeli: store_ids dışarıda doldurulur (sadrazam=kendi mağazaları,
-    kral=tüm mağazalar); ama filtrenin SQL'de BULUNMASI her custom sorgu için zorunludur."""
-    return ":store_ids" in sql
+    """Custom SQL tenant sınırında mı? İzolasyon İKİ meşru yoldan biriyle sağlanabilir:
+      - products/orders vb. → store_id = ANY(:store_ids)
+      - stores tablosu → s.user_id = :user_id (store'un sahibi; stores'ta store_id olmaz)
+    İkisi de yoksa sorgu tüm tabloyu tarar = tenant izolasyon ihlali → reddet.
+    Template'ler bu kontrolden muaftır; yalnızca LLM'in ürettiği custom SQL'e uygulanır."""
+    return (":store_ids" in sql) or (":user_id" in sql)
 
 
 def _ensure_uuid_cast(sql: str) -> str:

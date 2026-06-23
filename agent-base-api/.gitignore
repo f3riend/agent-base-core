@@ -8,3 +8,4 @@ __pycache__/
 *.pyc
 *.pyo
 *.log
+chroma_data/

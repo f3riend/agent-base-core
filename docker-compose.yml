@@ -40,8 +40,13 @@ services:
       CHAT_USE_LLM: ${CHAT_USE_LLM:-1}
       NL_PARSER_USE_LLM: ${NL_PARSER_USE_LLM:-1}
       FERNET_KEY: ${FERNET_KEY:-}
+      # ChromaDB embedded (PersistentClient) veri yolu — kalıcı volume'a yazılır.
+      # Host'ta product_index.py varsayılanı ./chroma_data; container'da /data/chroma.
+      CHROMA_PATH: ${CHROMA_PATH:-/data/chroma}
     volumes:
       - agent_base_media:/data/media
+      # ChromaDB embedding/index verisi — restart/rebuild sonrası korunur (yeniden embed YOK)
+      - agent_base_chroma:/data/chroma
     ports:
       - "${WEB_PORT:-8080}:80"
     depends_on:
@@ -88,3 +93,5 @@ services:
 volumes:
   agent_base_media:
   agent_base_postgres:
+  # ChromaDB kalıcı index volume'u (embedding'ler burada saklanır)
+  agent_base_chroma:
